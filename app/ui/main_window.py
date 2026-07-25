@@ -1,16 +1,17 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
-    QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QWidget,
 )
 
 from app.database.connection import Database
+from app.ui.products_window import ProductsWindow
 
 
 class MainWindow(QMainWindow):
@@ -24,6 +25,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Echando Chal POS")
         self.resize(1200, 750)
         self.setMinimumSize(1000, 650)
+
+        self.products_window = ProductsWindow(
+            self.database,
+            self,
+        )
 
         self._crear_interfaz()
 
@@ -72,7 +78,8 @@ class MainWindow(QMainWindow):
             boton = QPushButton(texto)
             boton.setMinimumHeight(45)
             boton.clicked.connect(
-                lambda checked=False, i=indice: self._mostrar_pagina(i)
+                lambda checked=False, i=indice:
+                self._mostrar_pagina(i)
             )
             layout.addWidget(boton)
 
@@ -85,36 +92,48 @@ class MainWindow(QMainWindow):
 
         return menu
 
-    def _crear_contenido(self) -> QWidget:
+    def _crear_contenido(self) -> QStackedWidget:
         self.paginas = QStackedWidget()
 
-        paginas = [
-            "Nueva Venta",
-            "Productos",
-            "Compras",
-            "Reportes",
-            "Dashboard",
-            "Configuración",
-        ]
+        pagina_venta = self._pagina_placeholder("Nueva Venta")
+        pagina_productos = self.products_window
+        pagina_compras = self._pagina_placeholder("Compras")
+        pagina_reportes = self._pagina_placeholder("Reportes")
+        pagina_dashboard = self._pagina_placeholder("Dashboard")
+        pagina_configuracion = self._pagina_placeholder("Configuración")
 
-        for nombre in paginas:
-            pagina = QWidget()
-            layout = QVBoxLayout(pagina)
-
-            titulo = QLabel(nombre)
-            titulo.setStyleSheet(
-                """
-                font-size: 28px;
-                font-weight: bold;
-                """
-            )
-
-            layout.addWidget(titulo)
-            layout.addStretch()
-
+        for pagina in [
+            pagina_venta,
+            pagina_productos,
+            pagina_compras,
+            pagina_reportes,
+            pagina_dashboard,
+            pagina_configuracion,
+        ]:
             self.paginas.addWidget(pagina)
 
         return self.paginas
 
+    @staticmethod
+    def _pagina_placeholder(nombre: str) -> QWidget:
+        pagina = QWidget()
+        layout = QVBoxLayout(pagina)
+
+        titulo = QLabel(nombre)
+        titulo.setStyleSheet(
+            """
+            font-size: 28px;
+            font-weight: bold;
+            """
+        )
+
+        layout.addWidget(titulo)
+        layout.addStretch()
+
+        return pagina
+
     def _mostrar_pagina(self, indice: int) -> None:
         self.paginas.setCurrentIndex(indice)
+
+        if indice == 1:
+            self.products_window._load_products()
