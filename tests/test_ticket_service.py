@@ -92,7 +92,8 @@ class TicketServiceTest(unittest.TestCase):
             self.assertIn("Producto de nombre", text)
             self.assertIn("Mercado Libre", text)
             self.assertIn("$160.00", text)
-            self.assertIn("Comision del medio de pago: $6.40", text)
+            self.assertNotIn("Comision", text)
+            self.assertNotIn("$6.40", text)
 
     def test_cancelled_sale_ticket_shows_status(self) -> None:
         self.database.connection.execute(
