@@ -15,6 +15,7 @@ from app.ui.products_window import ProductsWindow
 from app.ui.sale_window import SaleWindow
 from app.ui.sale_history_window import SaleHistoryWindow
 from app.ui.purchase_window import PurchaseWindow
+from app.ui.purchase_history_window import PurchaseHistoryWindow
 from app.ui.dashboard_window import DashboardWindow
 
 class MainWindow(QMainWindow):
@@ -42,6 +43,10 @@ class MainWindow(QMainWindow):
             self,
         )
         self.sale_history_window = SaleHistoryWindow(
+            self.database,
+            self,
+        )
+        self.purchase_history_window = PurchaseHistoryWindow(
             self.database,
             self,
         )
@@ -88,8 +93,9 @@ class MainWindow(QMainWindow):
             ("📦  Productos", 1),
             ("📥  Compras", 2),
             ("📜  Historial de ventas", 3),
-            ("📈  Dashboard", 4),
-            ("⚙  Configuración", 5),
+            ("📋  Historial de compras", 4),
+            ("📈  Dashboard", 5),
+            ("⚙  Configuración", 6),
         ]
 
         for texto, indice in botones:
@@ -124,6 +130,7 @@ class MainWindow(QMainWindow):
         pagina_productos = self.products_window
         pagina_compras = self.purchase_window
         pagina_historial = self.sale_history_window
+        pagina_historial_compras = self.purchase_history_window
         pagina_dashboard = self.dashboard_window
         pagina_configuracion = self._pagina_placeholder(
             "Configuración"
@@ -134,6 +141,7 @@ class MainWindow(QMainWindow):
         pagina_productos,
         pagina_compras,
         pagina_historial,
+        pagina_historial_compras,
         pagina_dashboard,
         pagina_configuracion,
         ]:
@@ -181,4 +189,6 @@ class MainWindow(QMainWindow):
         elif indice == 3:
             self.sale_history_window.refresh()
         elif indice == 4:
+            self.purchase_history_window.refresh()
+        elif indice == 5:
             self.dashboard_window.refresh()
