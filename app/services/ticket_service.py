@@ -73,6 +73,17 @@ class TicketService:
         logo_width = 0.0
         logo_height = 0.0
 
+        whatsapp_path = (
+            Path(__file__).resolve().parents[1]
+            / "assets"
+            / "whatsapp.png"
+        )
+        whatsapp_icon = (
+            ImageReader(str(whatsapp_path))
+            if whatsapp_path.is_file()
+            else None
+        )
+
         if logo_path.is_file():
             logo = ImageReader(str(logo_path))
             image_width, image_height = logo.getSize()
@@ -84,9 +95,9 @@ class TicketService:
             logo_height = image_height * scale
 
         if logo is not None:
-            page_height = max(135 * mm, (105 * mm) + items_height)
+            page_height = max(170 * mm, (140 * mm) + items_height)
         else:
-            page_height = max(100 * mm, (70 * mm) + items_height)
+            page_height = max(135 * mm, (105 * mm) + items_height)
 
         document = canvas.Canvas(
             str(output_path),
@@ -121,6 +132,51 @@ class TicketService:
         document.setFont("Helvetica", 8)
         document.drawCentredString(center, y, "COMPROBANTE DE VENTA")
         y -= 16
+
+        right_edge = self.WIDTH - self.MARGIN
+        document.setFont("Helvetica", 8)
+        document.drawRightString(
+            right_edge,
+            y,
+            "Plaza Navarra Local 51",
+        )
+        y -= 11
+        document.drawRightString(
+            right_edge,
+            y,
+            "Franccionamiento Los viñedos",
+        )
+        y -= 12
+
+        phone = "771 112 5462"
+        phone_width = stringWidth(phone, "Helvetica", 8)
+        if whatsapp_icon is not None:
+            icon_size = 4 * mm
+            document.drawImage(
+                whatsapp_icon,
+                right_edge - phone_width - icon_size - 3,
+                y - 3,
+                width=icon_size,
+                height=icon_size,
+                preserveAspectRatio=True,
+                mask="auto",
+            )
+        document.drawRightString(right_edge, y, phone)
+        y -= 16
+
+        document.setFont("Helvetica", 7)
+        document.drawRightString(
+            right_edge,
+            y,
+            "Nombre:____________________________________",
+        )
+        y -= 11
+        document.drawRightString(
+            right_edge,
+            y,
+            "Teléfono: ____________________________________",
+        )
+        y -= 17
 
         if sale["cancelada"]:
             document.setFillColor(HexColor("#B91C1C"))
@@ -193,6 +249,13 @@ class TicketService:
         y -= 5
         document.setFont("Helvetica", 8)
         document.drawCentredString(center, y, "Gracias por tu compra")
+        y -= 17
+        document.setFont("Helvetica-Bold", 8)
+        document.drawCentredString(
+            center,
+            y,
+            "NO HAY CAMBIOS NI DEVOLUCIONES",
+        )
         document.save()
 
         return output_path
