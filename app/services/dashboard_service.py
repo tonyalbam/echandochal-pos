@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 from app.database.connection import Database
 from app.services.report_service import ReportService
@@ -211,3 +212,15 @@ class DashboardService:
         )
 
         return report["mensual"]
+
+    def export_annual_financial_report(
+        self,
+        year: int,
+        destination: str | Path,
+    ) -> Path:
+        """Exporta el reporte anual utilizado por el Dashboard."""
+
+        return self.report_service.export_annual_financial_report(
+            year,
+            destination,
+        )
