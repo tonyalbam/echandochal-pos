@@ -96,6 +96,7 @@ def create_database(db: Database) -> None:
             producto_id INTEGER NOT NULL,
             cantidad REAL NOT NULL,
             precio_unitario REAL NOT NULL,
+            costo_unitario REAL NOT NULL DEFAULT 0,
             descuento REAL NOT NULL DEFAULT 0,
             subtotal REAL NOT NULL,
 
@@ -186,6 +187,28 @@ def create_database(db: Database) -> None:
         """
     )
 
+    _insertar_configuracion_inicial(db)
+    # -------------------------------------------------
+    # Migración: agregar costo_unitario a detalle_venta
+    # -------------------------------------------------
+
+    cursor.execute(
+        "PRAGMA table_info(detalle_venta)"
+    )
+
+    columnas = [
+        columna[1]
+        for columna in cursor.fetchall()
+    ]
+
+    if "costo_unitario" not in columnas:
+        cursor.execute(
+            """
+            ALTER TABLE detalle_venta
+            ADD COLUMN costo_unitario
+            REAL NOT NULL DEFAULT 0
+            """
+        )
     _insertar_configuracion_inicial(db)
 
     db.commit()

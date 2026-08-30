@@ -12,7 +12,10 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.ui.products_window import ProductsWindow
-
+from app.ui.sale_window import SaleWindow
+from app.ui.sale_history_window import SaleHistoryWindow
+from app.ui.purchase_window import PurchaseWindow
+from app.ui.dashboard_window import DashboardWindow
 
 class MainWindow(QMainWindow):
     """Ventana principal de Echando Chal POS."""
@@ -30,7 +33,22 @@ class MainWindow(QMainWindow):
             self.database,
             self,
         )
-
+        self.purchase_window = PurchaseWindow(
+          self.database,
+        self,
+        )
+        self.sale_window = SaleWindow(
+            self.database,
+            self,
+        )
+        self.sale_history_window = SaleHistoryWindow(
+            self.database,
+            self,
+        )
+        self.dashboard_window = DashboardWindow(
+            self.database,
+            self,
+        )
         self._crear_interfaz()
 
     def _crear_interfaz(self) -> None:
@@ -69,7 +87,7 @@ class MainWindow(QMainWindow):
             ("🛒  Nueva venta", 0),
             ("📦  Productos", 1),
             ("📥  Compras", 2),
-            ("📊  Reportes", 3),
+            ("📜  Historial de ventas", 3),
             ("📈  Dashboard", 4),
             ("⚙  Configuración", 5),
         ]
@@ -77,16 +95,23 @@ class MainWindow(QMainWindow):
         for texto, indice in botones:
             boton = QPushButton(texto)
             boton.setMinimumHeight(45)
+
             boton.clicked.connect(
                 lambda checked=False, i=indice:
                 self._mostrar_pagina(i)
             )
+
             layout.addWidget(boton)
 
         layout.addStretch()
 
-        version = QLabel("Echando Chal POS\nv0.1.0")
-        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        version = QLabel(
+            "Echando Chal POS\nv0.1.0"
+        )
+
+        version.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
 
         layout.addWidget(version)
 
@@ -95,31 +120,37 @@ class MainWindow(QMainWindow):
     def _crear_contenido(self) -> QStackedWidget:
         self.paginas = QStackedWidget()
 
-        pagina_venta = self._pagina_placeholder("Nueva Venta")
+        pagina_venta = self.sale_window
         pagina_productos = self.products_window
-        pagina_compras = self._pagina_placeholder("Compras")
-        pagina_reportes = self._pagina_placeholder("Reportes")
-        pagina_dashboard = self._pagina_placeholder("Dashboard")
-        pagina_configuracion = self._pagina_placeholder("Configuración")
+        pagina_compras = self.purchase_window
+        pagina_historial = self.sale_history_window
+        pagina_dashboard = self.dashboard_window
+        pagina_configuracion = self._pagina_placeholder(
+            "Configuración"
+        )
 
         for pagina in [
-            pagina_venta,
-            pagina_productos,
-            pagina_compras,
-            pagina_reportes,
-            pagina_dashboard,
-            pagina_configuracion,
+        pagina_venta,
+        pagina_productos,
+        pagina_compras,
+        pagina_historial,
+        pagina_dashboard,
+        pagina_configuracion,
         ]:
             self.paginas.addWidget(pagina)
 
         return self.paginas
 
     @staticmethod
-    def _pagina_placeholder(nombre: str) -> QWidget:
+    def _pagina_placeholder(
+        nombre: str,
+    ) -> QWidget:
         pagina = QWidget()
+
         layout = QVBoxLayout(pagina)
 
         titulo = QLabel(nombre)
+
         titulo.setStyleSheet(
             """
             font-size: 28px;
@@ -132,8 +163,22 @@ class MainWindow(QMainWindow):
 
         return pagina
 
-    def _mostrar_pagina(self, indice: int) -> None:
+    def _mostrar_pagina(
+        self,
+        indice: int,
+    ) -> None:
         self.paginas.setCurrentIndex(indice)
 
-        if indice == 1:
+        if indice == 0:
+            self.sale_window.focus_input()
+
+        elif indice == 1:
             self.products_window._load_products()
+
+        elif indice == 2:
+            self.purchase_window.refresh()
+
+        elif indice == 3:
+            self.sale_history_window.refresh()
+        elif indice == 4:
+            self.dashboard_window.refresh()
