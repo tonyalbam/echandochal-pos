@@ -4,6 +4,7 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 from app.database.connection import Database
 from app.services.configuration_service import ConfigurationService
@@ -62,7 +63,30 @@ class TicketService:
             31 + (len(lines) * 10)
             for _, lines in wrapped_items
         )
-        page_height = max(100 * mm, (70 * mm) + items_height)
+
+        logo_path = (
+            Path(__file__).resolve().parents[1]
+            / "assets"
+            / "logo_ticket.png"
+        )
+        logo: ImageReader | None = None
+        logo_width = 0.0
+        logo_height = 0.0
+
+        if logo_path.is_file():
+            logo = ImageReader(str(logo_path))
+            image_width, image_height = logo.getSize()
+            scale = min(
+                (62 * mm) / image_width,
+                (35 * mm) / image_height,
+            )
+            logo_width = image_width * scale
+            logo_height = image_height * scale
+
+        if logo is not None:
+            page_height = max(135 * mm, (105 * mm) + items_height)
+        else:
+            page_height = max(100 * mm, (70 * mm) + items_height)
 
         document = canvas.Canvas(
             str(output_path),
@@ -71,12 +95,29 @@ class TicketService:
         document.setTitle(f"Ticket {sale['folio']}")
 
         center = self.WIDTH / 2
-        y = page_height - (10 * mm)
+        y = page_height - (6 * mm)
         business_name = self.configuration.get_business_name()
 
-        document.setFont("Helvetica-Bold", 14)
-        document.drawCentredString(center, y, business_name)
-        y -= 15
+        if logo is not None:
+            y -= logo_height
+            document.drawImage(
+                logo,
+                center - (logo_width / 2),
+                y,
+                width=logo_width,
+                height=logo_height,
+                preserveAspectRatio=True,
+                mask="auto",
+            )
+            y -= 12
+            document.setFont("Helvetica-Bold", 10)
+            document.drawCentredString(center, y, business_name)
+            y -= 14
+        else:
+            document.setFont("Helvetica-Bold", 14)
+            document.drawCentredString(center, y, business_name)
+            y -= 15
+
         document.setFont("Helvetica", 8)
         document.drawCentredString(center, y, "COMPROBANTE DE VENTA")
         y -= 16
