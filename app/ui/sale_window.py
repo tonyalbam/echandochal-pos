@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFrame,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.sale_service import SaleService
+from app.services.ticket_service import TicketService
 
 
 class SaleWindow(QWidget):
@@ -27,7 +29,9 @@ class SaleWindow(QWidget):
 
         self.database = database
         self.service = SaleService(database)
+        self.ticket_service = TicketService(database)
         self.items: list[dict] = []
+        self.last_sale_id: int | None = None
 
         self._crear_interfaz()
         self._actualizar_totales()
@@ -222,6 +226,11 @@ class SaleWindow(QWidget):
 
         botones.addStretch()
 
+        self.ticket_button = QPushButton("Guardar último ticket")
+        self.ticket_button.setMinimumSize(170, 42)
+        self.ticket_button.setEnabled(False)
+        self.ticket_button.clicked.connect(self._guardar_ultimo_ticket)
+
         limpiar = QPushButton("Limpiar")
 
         limpiar.setMinimumSize(
@@ -246,6 +255,7 @@ class SaleWindow(QWidget):
             self._cobrar
         )
 
+        botones.addWidget(self.ticket_button)
         botones.addWidget(limpiar)
         botones.addWidget(cobrar)
 
@@ -607,7 +617,42 @@ class SaleWindow(QWidget):
             mensaje,
         )
 
+        self.last_sale_id = int(venta["id"])
+        self.ticket_button.setEnabled(True)
+
         self._limpiar_venta()
+
+    def _guardar_ultimo_ticket(self) -> None:
+        if self.last_sale_id is None:
+            return
+
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar ticket de venta",
+            "ticket_venta.pdf",
+            "Documento PDF (*.pdf)",
+        )
+        if not destination:
+            return
+
+        try:
+            output_path = self.ticket_service.generate_sale_ticket(
+                self.last_sale_id,
+                destination,
+            )
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo crear el ticket",
+                str(error),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Ticket guardado",
+            f"El ticket se guardó correctamente en:\n{output_path}",
+        )
 
     def _limpiar_venta(self) -> None:
 
