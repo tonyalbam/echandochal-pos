@@ -94,10 +94,16 @@ class TicketServiceTest(unittest.TestCase):
             self.assertIn("$160.00", text)
             self.assertNotIn("Comision", text)
             self.assertNotIn("$6.40", text)
+            self.assertIn("Plaza Navarra Local 51", text)
+            self.assertIn("Franccionamiento Los viñedos", text)
+            self.assertIn("771 112 5462", text)
+            self.assertIn("Nombre:", text)
+            self.assertIn("Teléfono:", text)
+            self.assertIn("NO HAY CAMBIOS NI DEVOLUCIONES", text)
 
             resources = reader.pages[0]["/Resources"]
             self.assertIn("/XObject", resources)
-            self.assertGreater(len(resources["/XObject"]), 0)
+            self.assertGreaterEqual(len(resources["/XObject"]), 2)
 
     def test_cancelled_sale_ticket_shows_status(self) -> None:
         self.database.connection.execute(
