@@ -149,18 +149,6 @@ class TicketService:
             )
             y -= 13
 
-        if float(sale["monto_comision"]) > 0:
-            document.setFont("Helvetica", 7)
-            document.drawString(
-                self.MARGIN,
-                y,
-                (
-                    "Comision del medio de pago: "
-                    f"${float(sale['monto_comision']):,.2f}"
-                ),
-            )
-            y -= 11
-
         y -= 5
         document.setFont("Helvetica", 8)
         document.drawCentredString(center, y, "Gracias por tu compra")
