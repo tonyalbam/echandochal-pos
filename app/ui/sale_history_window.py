@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.sale_history_service import SaleHistoryService
+from app.services.ticket_service import TicketService
 
 
 class SaleDetailDialog(QDialog):
@@ -184,6 +185,7 @@ class SaleHistoryWindow(QWidget):
         self.service = SaleHistoryService(
             database
         )
+        self.ticket_service = TicketService(database)
 
         self.sales: list[dict] = []
 
@@ -355,6 +357,11 @@ class SaleHistoryWindow(QWidget):
         self.exportar.clicked.connect(self._exportar_excel)
         botones.addWidget(self.exportar)
 
+        self.ticket = QPushButton("Ticket PDF")
+        self.ticket.setMinimumSize(120, 40)
+        self.ticket.clicked.connect(self._exportar_ticket)
+        botones.addWidget(self.ticket)
+
         self.detalle = QPushButton(
             "Ver detalle"
         )
@@ -509,12 +516,14 @@ class SaleHistoryWindow(QWidget):
 
         if fila < 0 or fila >= len(self.sales):
             self.detalle.setEnabled(False)
+            self.ticket.setEnabled(False)
             self.cancelar.setEnabled(False)
             return
 
         sale = self.sales[fila]
 
         self.detalle.setEnabled(True)
+        self.ticket.setEnabled(True)
 
         self.cancelar.setEnabled(
             not bool(sale["cancelada"])
@@ -555,6 +564,45 @@ class SaleHistoryWindow(QWidget):
         )
 
         dialogo.exec()
+
+    def _exportar_ticket(self) -> None:
+        fila = self.tabla.currentRow()
+        if fila < 0 or fila >= len(self.sales):
+            QMessageBox.information(
+                self,
+                "Selecciona una venta",
+                "Selecciona una venta para generar su ticket.",
+            )
+            return
+
+        sale = self.sales[fila]
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar ticket de venta",
+            f"ticket_{sale['folio']}.pdf",
+            "Documento PDF (*.pdf)",
+        )
+        if not destination:
+            return
+
+        try:
+            output_path = self.ticket_service.generate_sale_ticket(
+                sale["id"],
+                destination,
+            )
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo crear el ticket",
+                str(error),
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Ticket guardado",
+            f"El ticket se guardó correctamente en:\n{output_path}",
+        )
 
     def _cancelar_venta(self) -> None:
         fila = self.tabla.currentRow()
