@@ -17,6 +17,7 @@ from app.ui.sale_history_window import SaleHistoryWindow
 from app.ui.purchase_window import PurchaseWindow
 from app.ui.purchase_history_window import PurchaseHistoryWindow
 from app.ui.dashboard_window import DashboardWindow
+from app.ui.configuration_window import ConfigurationWindow
 
 class MainWindow(QMainWindow):
     """Ventana principal de Echando Chal POS."""
@@ -54,7 +55,17 @@ class MainWindow(QMainWindow):
             self.database,
             self,
         )
+        self.configuration_window = ConfigurationWindow(
+            self.database,
+            self,
+        )
+        self.configuration_window.settings_saved.connect(
+            self._apply_settings
+        )
         self._crear_interfaz()
+        self._apply_settings(
+            self.configuration_window.service.get_settings()
+        )
 
     def _crear_interfaz(self) -> None:
         central = QWidget()
@@ -78,13 +89,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(20, 25, 20, 20)
         layout.setSpacing(10)
 
-        titulo = QLabel("ECHANDO CHAL")
-        titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.business_title = QLabel("ECHANDO CHAL")
+        self.business_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         subtitulo = QLabel("PUNTO DE VENTA")
         subtitulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        layout.addWidget(titulo)
+        layout.addWidget(self.business_title)
         layout.addWidget(subtitulo)
         layout.addSpacing(25)
 
@@ -132,9 +143,7 @@ class MainWindow(QMainWindow):
         pagina_historial = self.sale_history_window
         pagina_historial_compras = self.purchase_history_window
         pagina_dashboard = self.dashboard_window
-        pagina_configuracion = self._pagina_placeholder(
-            "Configuración"
-        )
+        pagina_configuracion = self.configuration_window
 
         for pagina in [
         pagina_venta,
@@ -192,3 +201,11 @@ class MainWindow(QMainWindow):
             self.purchase_history_window.refresh()
         elif indice == 5:
             self.dashboard_window.refresh()
+        elif indice == 6:
+            self.configuration_window.refresh()
+
+    def _apply_settings(self, settings: dict) -> None:
+        business_name = settings["nombre_negocio"]
+        self.setWindowTitle(f"{business_name} POS")
+        if hasattr(self, "business_title"):
+            self.business_title.setText(business_name.upper())
