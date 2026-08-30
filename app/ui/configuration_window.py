@@ -93,6 +93,13 @@ class ConfigurationWindow(QWidget):
             )
         )
 
+        automatic_info = QLabel(
+            "Respaldo automático: al iniciar la aplicación, una vez por día.\n"
+            "Ubicación: backups\\automaticos"
+        )
+        automatic_info.setWordWrap(True)
+        backup_layout.addWidget(automatic_info)
+
         backup_button = QPushButton("Crear respaldo")
         backup_button.setMinimumSize(160, 42)
         backup_button.clicked.connect(self._create_backup)
