@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.database.connection import Database
+from app.services.report_service import ReportService
 
 
 class DashboardService:
@@ -8,6 +9,7 @@ class DashboardService:
 
     def __init__(self, database: Database) -> None:
         self.database = database
+        self.report_service = ReportService(database)
 
     def get_summary(self) -> dict:
         """Devuelve los principales indicadores del Dashboard."""
@@ -202,75 +204,10 @@ class DashboardService:
         self,
         year: int,
     ) -> list[dict]:
-        """
-        Devuelve ventas, comisiones, ingreso neto y utilidad
-        para cada mes del año indicado.
-        """
+        """Devuelve el detalle mensual del reporte financiero anual."""
 
-        cursor = self.database.cursor()
-
-        cursor.execute(
-            """
-            SELECT
-                substr(v.fecha, 6, 2) AS mes,
-                COALESCE(SUM(v.total), 0) AS ventas,
-                COALESCE(SUM(v.monto_comision), 0) AS comisiones,
-                COALESCE(SUM(costos.costo), 0) AS costo
-            FROM ventas v
-            LEFT JOIN (
-                SELECT
-                    venta_id,
-                    SUM(cantidad * costo_unitario) AS costo
-                FROM detalle_venta
-                GROUP BY venta_id
-            ) costos
-                ON costos.venta_id = v.id
-            WHERE v.cancelada = 0
-              AND substr(v.fecha, 1, 4) = ?
-            GROUP BY substr(v.fecha, 6, 2)
-            ORDER BY mes
-            """,
-            (str(year),),
+        report = self.report_service.get_annual_financial_report(
+            year
         )
 
-        rows = cursor.fetchall()
-
-        data_by_month = {
-            int(row["mes"]): {
-                "ventas": float(row["ventas"]),
-                "comisiones": float(row["comisiones"]),
-                "costo": float(row["costo"]),
-            }
-            for row in rows
-        }
-
-        result = []
-
-        for month in range(1, 13):
-            values = data_by_month.get(
-                month,
-                {
-                    "ventas": 0.0,
-                    "comisiones": 0.0,
-                    "costo": 0.0,
-                },
-            )
-
-            ventas = values["ventas"]
-            comisiones = values["comisiones"]
-            costo = values["costo"]
-
-            ingreso_neto = ventas - comisiones
-            utilidad = ventas - costo - comisiones
-
-            result.append(
-                {
-                    "mes": month,
-                    "ventas": round(ventas, 2),
-                    "comisiones": round(comisiones, 2),
-                    "ingreso_neto": round(ingreso_neto, 2),
-                    "utilidad": round(utilidad, 2),
-                }
-            )
-
-        return result
+        return report["mensual"]
