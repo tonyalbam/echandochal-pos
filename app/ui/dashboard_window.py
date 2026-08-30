@@ -14,6 +14,7 @@ from app.database.connection import Database
 from app.services.dashboard_service import DashboardService
 from datetime import datetime
 from app.ui.widgets.annual_financial_chart import AnnualFinancialChart
+from app.ui.widgets.annual_commission_chart import AnnualCommissionChart
 
 class StatCard(QFrame):
     """Tarjeta reutilizable para mostrar un indicador del Dashboard."""
@@ -304,6 +305,37 @@ class DashboardWindow(QWidget):
         charts_layout.addWidget(self.annual_chart)
 
         content_layout.addWidget(charts_container)
+        commission_container = QFrame()
+        commission_container.setObjectName("chartsPlaceholder")
+
+        commission_layout = QVBoxLayout(
+            commission_container
+        )
+        commission_layout.setContentsMargins(
+            16,
+            16,
+            16,
+            16,
+        )
+        commission_layout.setSpacing(10)
+
+        commission_title = QLabel(
+            "Comisiones anuales"
+        )
+        commission_title.setObjectName("chartTitle")
+
+        self.commission_chart = AnnualCommissionChart()
+
+        commission_layout.addWidget(
+            commission_title
+        )
+        commission_layout.addWidget(
+            self.commission_chart
+        )
+
+        content_layout.addWidget(
+            commission_container
+        )
         content_layout.addStretch()
 
         scroll.setWidget(content)
@@ -424,6 +456,10 @@ class DashboardWindow(QWidget):
         )
 
         self.annual_chart.set_data(
+            annual_data,
+            year,
+        )
+        self.commission_chart.set_data(
             annual_data,
             year,
         )

@@ -51,7 +51,7 @@ class DashboardService:
         )
 
         return round(float(cursor.fetchone()[0]), 2)
-
+    
     def get_profit_for_period(self, period: str) -> float:
         """Obtiene utilidad después de costo y comisiones."""
 
@@ -60,17 +60,18 @@ class DashboardService:
         cursor.execute(
             """
             SELECT
-                COALESCE(SUM(dv.subtotal), 0),
-                COALESCE(
-                    SUM(
-                        dv.cantidad * dv.costo_unitario
-                    ),
-                    0
-                ),
-                COALESCE(SUM(v.monto_comision), 0)
+                COALESCE(SUM(v.total), 0) AS ventas,
+                COALESCE(SUM(v.monto_comision), 0) AS comisiones,
+                COALESCE(SUM(costos.costo), 0) AS costo
             FROM ventas v
-            INNER JOIN detalle_venta dv
-                ON dv.venta_id = v.id
+            LEFT JOIN (
+                SELECT
+                    venta_id,
+                    SUM(cantidad * costo_unitario) AS costo
+                FROM detalle_venta
+                GROUP BY venta_id
+            ) costos
+                ON costos.venta_id = v.id
             WHERE v.cancelada = 0
               AND v.fecha LIKE ?
             """,
@@ -79,15 +80,15 @@ class DashboardService:
 
         row = cursor.fetchone()
 
-        ventas = float(row[0])
-        costo = float(row[1])
-        comisiones = float(row[2])
+        ventas = float(row["ventas"])
+        comisiones = float(row["comisiones"])
+        costo = float(row["costo"])
 
         return round(
             ventas - costo - comisiones,
             2,
         )
-
+        
     def get_commissions_for_period(
         self,
         period: str,
@@ -214,15 +215,16 @@ class DashboardService:
                 substr(v.fecha, 6, 2) AS mes,
                 COALESCE(SUM(v.total), 0) AS ventas,
                 COALESCE(SUM(v.monto_comision), 0) AS comisiones,
-                COALESCE(
-                    SUM(
-                        dv.cantidad * dv.costo_unitario
-                    ),
-                    0
-                ) AS costo
+                COALESCE(SUM(costos.costo), 0) AS costo
             FROM ventas v
-            INNER JOIN detalle_venta dv
-                ON dv.venta_id = v.id
+            LEFT JOIN (
+                SELECT
+                    venta_id,
+                    SUM(cantidad * costo_unitario) AS costo
+                FROM detalle_venta
+                GROUP BY venta_id
+            ) costos
+                ON costos.venta_id = v.id
             WHERE v.cancelada = 0
               AND substr(v.fecha, 1, 4) = ?
             GROUP BY substr(v.fecha, 6, 2)
