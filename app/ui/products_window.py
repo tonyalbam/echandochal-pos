@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -47,6 +48,10 @@ class ProductsWindow(QWidget):
         self.new_button = QPushButton("＋ Nuevo producto")
         self.new_button.clicked.connect(self._new_product)
 
+        self.export_button = QPushButton("Exportar inventario")
+        self.export_button.clicked.connect(self._export_inventory)
+
+        header.addWidget(self.export_button)
         header.addWidget(self.new_button)
 
         layout.addLayout(header)
@@ -246,3 +251,33 @@ class ProductsWindow(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             self.service.deactivate_product(product_id)
             self._load_products()
+
+    def _export_inventory(self) -> None:
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar reporte de inventario",
+            "reporte_inventario.xlsx",
+            "Archivos de Excel (*.xlsx)",
+        )
+
+        if not destination:
+            return
+
+        try:
+            output_path = self.service.export_inventory_report(
+                destination,
+                search=self.search.text(),
+            )
+        except (OSError, PermissionError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo exportar",
+                f"No fue posible crear el reporte:\n{error}",
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Reporte exportado",
+            f"El reporte se guardó correctamente en:\n{output_path}",
+        )
