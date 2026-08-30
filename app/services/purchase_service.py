@@ -7,6 +7,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.database.connection import Database
+from app.services.configuration_service import ConfigurationService
 
 
 class PurchaseService:
@@ -397,7 +398,10 @@ class PurchaseService:
             period = f"{date_from or 'Inicio'} a {date_to or 'Hoy'}"
 
         purchases_sheet.merge_cells("A1:G1")
-        purchases_sheet["A1"] = "Echando Chal POS - Historial de compras"
+        business_name = ConfigurationService(
+            self.database
+        ).get_business_name()
+        purchases_sheet["A1"] = f"{business_name} POS - Historial de compras"
         purchases_sheet["A1"].fill = title_fill
         purchases_sheet["A1"].font = Font(
             color="FFFFFF", bold=True, size=16
