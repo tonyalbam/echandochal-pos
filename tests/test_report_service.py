@@ -1,5 +1,9 @@
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
+
+from openpyxl import load_workbook
 
 from app.database.schema import create_database
 from app.services.dashboard_service import DashboardService
@@ -191,6 +195,39 @@ class AnnualFinancialReportTest(unittest.TestCase):
                 2026
             )["mensual"],
         )
+
+    def test_export_annual_report_to_excel(self) -> None:
+        service = ReportService(self.database)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = service.export_annual_financial_report(
+                2026,
+                Path(directory) / "reporte_2026",
+            )
+
+            self.assertEqual(output_path.suffix, ".xlsx")
+            self.assertTrue(output_path.exists())
+
+            workbook = load_workbook(
+                output_path,
+                data_only=False,
+            )
+            sheet = workbook["Reporte anual"]
+
+            self.assertEqual(
+                sheet["A1"].value,
+                "Echando Chal POS - Reporte financiero 2026",
+            )
+            self.assertEqual(sheet["A14"].value, "Agosto")
+            self.assertEqual(sheet["B14"].value, 85.0)
+            self.assertEqual(sheet["C14"].value, 50.0)
+            self.assertEqual(sheet["D14"].value, 3.4)
+            self.assertEqual(sheet["E14"].value, 81.6)
+            self.assertEqual(sheet["F14"].value, 31.6)
+            self.assertEqual(sheet["B19"].value, 85.0)
+            self.assertEqual(sheet.auto_filter.ref, "A6:F18")
+
+            workbook.close()
 
 
 if __name__ == "__main__":
