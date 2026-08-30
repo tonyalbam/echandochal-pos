@@ -42,6 +42,43 @@ class BackupService:
 
         return output_path
 
+    def create_daily_automatic_backup(
+        self,
+        directory: str | Path | None = None,
+        now: datetime | None = None,
+    ) -> dict:
+        """Crea como máximo un respaldo automático válido por día."""
+
+        current_time = now or datetime.now()
+        if directory is None:
+            app_root = getattr(self.database, "app_root", None)
+            if app_root is None:
+                raise ValueError(
+                    "No fue posible determinar la carpeta de respaldos."
+                )
+            directory = Path(app_root) / "backups" / "automaticos"
+
+        backup_directory = Path(directory)
+        backup_path = backup_directory / (
+            f"echandochal_automatico_{current_time:%Y%m%d}.db"
+        )
+
+        if backup_path.is_file():
+            try:
+                self.validate_backup(backup_path)
+            except ValueError:
+                backup_path = backup_directory / (
+                    "echandochal_automatico_"
+                    f"{current_time:%Y%m%d_%H%M%S}.db"
+                )
+            else:
+                return {"path": backup_path, "created": False}
+
+        return {
+            "path": self.create_backup(backup_path),
+            "created": True,
+        }
+
     def validate_backup(self, source: str | Path) -> dict:
         """Valida integridad y estructura mínima de un respaldo."""
 
