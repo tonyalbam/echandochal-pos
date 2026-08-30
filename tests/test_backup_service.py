@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from app.database.schema import create_database
@@ -75,6 +76,25 @@ class BackupServiceTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 BackupService(self.database).create_backup(active_path)
+
+    def test_automatic_backup_is_created_only_once_per_day(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = BackupService(self.database)
+            moment = datetime(2026, 8, 30, 9, 15)
+
+            first = service.create_daily_automatic_backup(directory, moment)
+            second = service.create_daily_automatic_backup(directory, moment)
+
+            self.assertTrue(first["created"])
+            self.assertFalse(second["created"])
+            self.assertEqual(first["path"], second["path"])
+            self.assertEqual(
+                first["path"].name,
+                "echandochal_automatico_20260830.db",
+            )
+            self.assertEqual(len(list(Path(directory).glob("*.db"))), 1)
+            info = service.validate_backup(first["path"])
+            self.assertEqual(info["productos"], 1)
 
 
 if __name__ == "__main__":
