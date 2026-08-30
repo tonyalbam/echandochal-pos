@@ -292,6 +292,48 @@ class DashboardWindow(QWidget):
         )
 
         content_layout.addLayout(operation_grid)
+
+        # ---------------------------------------------------------
+        # Indicadores clave del mes
+        # ---------------------------------------------------------
+
+        content_layout.addWidget(
+            self._section_title("Indicadores clave del mes")
+        )
+
+        kpi_grid = QGridLayout()
+        kpi_grid.setSpacing(12)
+
+        self.cards["margen_utilidad_mes"] = StatCard(
+            "Margen de utilidad",
+            value="0.00%",
+            subtitle="Utilidad sobre ventas del mes",
+        )
+
+        self.cards["unidades_vendidas_mes"] = StatCard(
+            "Unidades vendidas",
+            value="0",
+            subtitle="Productos vendidos durante el mes",
+        )
+
+        self.cards["producto_mas_vendido"] = StatCard(
+            "Producto más vendido",
+            value="Sin ventas",
+            subtitle="Sin unidades vendidas este mes",
+        )
+
+        kpi_grid.addWidget(
+            self.cards["margen_utilidad_mes"], 0, 0
+        )
+        kpi_grid.addWidget(
+            self.cards["unidades_vendidas_mes"], 0, 1
+        )
+        kpi_grid.addWidget(
+            self.cards["producto_mas_vendido"], 0, 2
+        )
+
+        content_layout.addLayout(kpi_grid)
+
         # ---------------------------------------------------------
         # Gráfica anual
         # ---------------------------------------------------------
@@ -438,6 +480,27 @@ class DashboardWindow(QWidget):
 
         self.cards["stock_bajo"].set_value(
             f"{summary['stock_bajo']:,}"
+        )
+
+        self.cards["margen_utilidad_mes"].set_value(
+            f"{summary['margen_utilidad_mes']:.2f}%"
+        )
+
+        units_sold = summary["unidades_vendidas_mes"]
+        self.cards["unidades_vendidas_mes"].set_value(
+            f"{units_sold:g}"
+        )
+
+        self.cards["producto_mas_vendido"].set_value(
+            summary["producto_mas_vendido"]
+        )
+        top_units = summary["producto_mas_vendido_unidades"]
+        self.cards["producto_mas_vendido"].set_subtitle(
+            (
+                f"{top_units:g} unidades vendidas este mes"
+                if top_units > 0
+                else "Sin unidades vendidas este mes"
+            )
         )
 
         ventas_mes = summary["ventas_mes"]
