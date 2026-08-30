@@ -359,18 +359,17 @@ class DashboardWindow(QWidget):
                 }
                 """
                 )
-
-        def _section_title(self, text: str) -> QLabel:
-            label = QLabel(text)
-            label.setObjectName("sectionTitle")
+    def _section_title(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("sectionTitle")
         return label
 
-        @staticmethod
-        def _money(value: float) -> str:
-            return f"${value:,.2f}"
+    @staticmethod
+    def _money(value: float) -> str:
+        return f"${value:,.2f}"
 
-        def refresh(self) -> None:
-            """Actualiza todos los indicadores."""
+    def refresh(self) -> None:
+        """Actualiza todos los indicadores."""
 
         summary = self.service.get_summary()
 
@@ -387,43 +386,44 @@ class DashboardWindow(QWidget):
             "ingreso_neto_anio",
             "ticket_promedio",
             "valor_inventario",
-            )
+        )
 
         for field in money_fields:
             self.cards[field].set_value(
                 self._money(summary[field])
-                )
+            )
 
         self.cards["numero_ventas"].set_value(
             f"{summary['numero_ventas']:,}"
-            )
+        )
 
         self.cards["stock_bajo"].set_value(
             f"{summary['stock_bajo']:,}"
-            )
+        )
 
         ventas_mes = summary["ventas_mes"]
         comisiones_mes = summary["comisiones_mes"]
 
         if ventas_mes > 0:
             porcentaje = (
-            comisiones_mes / ventas_mes
+                comisiones_mes / ventas_mes
             ) * 100
         else:
             porcentaje = 0.0
 
         self.cards["comisiones_mes"].set_subtitle(
             f"{porcentaje:.2f}% de las ventas del mes"
-            )
+        )
+
         year = datetime.now().year
 
         annual_data = (
             self.service.get_monthly_financial_summary(
                 year
-                )
             )
+        )
 
         self.annual_chart.set_data(
             annual_data,
             year,
-            )
+        )
