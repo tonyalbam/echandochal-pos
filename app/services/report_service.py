@@ -1,3 +1,9 @@
+from pathlib import Path
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
 from app.database.connection import Database
 
 
@@ -132,3 +138,113 @@ class ReportService:
             ),
             "mensual": monthly,
         }
+
+    def export_annual_financial_report(
+        self,
+        year: int,
+        destination: str | Path,
+    ) -> Path:
+        """Exporta el reporte financiero anual a un archivo Excel."""
+
+        report = self.get_annual_financial_report(year)
+        output_path = Path(destination)
+
+        if output_path.suffix.lower() != ".xlsx":
+            output_path = output_path.with_suffix(".xlsx")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Reporte anual"
+
+        title_fill = PatternFill("solid", fgColor="1F4E78")
+        header_fill = PatternFill("solid", fgColor="D9EAF7")
+        title_font = Font(color="FFFFFF", bold=True, size=16)
+        header_font = Font(bold=True)
+        money_format = '"$"#,##0.00'
+
+        sheet.merge_cells("A1:F1")
+        sheet["A1"] = f"Echando Chal POS - Reporte financiero {year}"
+        sheet["A1"].fill = title_fill
+        sheet["A1"].font = title_font
+        sheet["A1"].alignment = Alignment(horizontal="center")
+
+        summary = (
+            ("Ventas", report["ventas"]),
+            ("Costo", report["costo"]),
+            ("Comisiones", report["comisiones"]),
+            ("Ingreso neto", report["ingreso_neto"]),
+            ("Utilidad", report["utilidad"]),
+        )
+
+        for column, (label, value) in enumerate(summary, start=1):
+            label_cell = sheet.cell(row=3, column=column, value=label)
+            value_cell = sheet.cell(row=4, column=column, value=value)
+            label_cell.fill = header_fill
+            label_cell.font = header_font
+            label_cell.alignment = Alignment(horizontal="center")
+            value_cell.number_format = money_format
+            value_cell.alignment = Alignment(horizontal="center")
+
+        headers = (
+            "Mes",
+            "Ventas",
+            "Costo",
+            "Comisiones",
+            "Ingreso neto",
+            "Utilidad",
+        )
+
+        for column, header in enumerate(headers, start=1):
+            cell = sheet.cell(row=6, column=column, value=header)
+            cell.fill = title_fill
+            cell.font = Font(color="FFFFFF", bold=True)
+            cell.alignment = Alignment(horizontal="center")
+
+        month_names = (
+            "Enero", "Febrero", "Marzo", "Abril",
+            "Mayo", "Junio", "Julio", "Agosto",
+            "Septiembre", "Octubre", "Noviembre", "Diciembre",
+        )
+
+        for row_number, month in enumerate(report["mensual"], start=7):
+            values = (
+                month_names[month["mes"] - 1],
+                month["ventas"],
+                month["costo"],
+                month["comisiones"],
+                month["ingreso_neto"],
+                month["utilidad"],
+            )
+
+            for column, value in enumerate(values, start=1):
+                cell = sheet.cell(row=row_number, column=column, value=value)
+                if column > 1:
+                    cell.number_format = money_format
+
+        total_row = 19
+        sheet.cell(row=total_row, column=1, value="Total anual")
+        sheet.cell(row=total_row, column=1).font = header_font
+
+        total_keys = (
+            "ventas", "costo", "comisiones", "ingreso_neto", "utilidad"
+        )
+        for column, key in enumerate(total_keys, start=2):
+            cell = sheet.cell(
+                row=total_row,
+                column=column,
+                value=report[key],
+            )
+            cell.font = header_font
+            cell.number_format = money_format
+
+        sheet.freeze_panes = "A7"
+        sheet.auto_filter.ref = "A6:F18"
+
+        widths = (16, 15, 15, 15, 17, 15)
+        for column, width in enumerate(widths, start=1):
+            sheet.column_dimensions[get_column_letter(column)].width = width
+
+        workbook.save(output_path)
+        return output_path
