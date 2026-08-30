@@ -98,6 +98,11 @@ class ConfigurationWindow(QWidget):
         backup_button.clicked.connect(self._create_backup)
         backup_layout.addWidget(backup_button)
 
+        restore_button = QPushButton("Restaurar respaldo")
+        restore_button.setMinimumSize(160, 42)
+        restore_button.clicked.connect(self._restore_backup)
+        backup_layout.addWidget(restore_button)
+
         layout.addWidget(backup_card)
         layout.addStretch()
 
@@ -161,5 +166,69 @@ class ConfigurationWindow(QWidget):
             (
                 "El respaldo se creó y validó correctamente en:\n"
                 f"{output_path}"
+            ),
+        )
+
+    def _restore_backup(self) -> None:
+        source, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleccionar respaldo para restaurar",
+            "",
+            "Base de datos SQLite (*.db)",
+        )
+
+        if not source:
+            return
+
+        try:
+            info = self.backup_service.validate_backup(source)
+        except (OSError, sqlite3.Error, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "Respaldo no válido",
+                f"El archivo seleccionado no puede restaurarse:\n{error}",
+            )
+            return
+
+        answer = QMessageBox.warning(
+            self,
+            "Confirmar restauración",
+            (
+                "La información actual será sustituida por el respaldo.\n\n"
+                f"Productos: {info['productos']}\n"
+                f"Ventas: {info['ventas']}\n"
+                f"Compras: {info['compras']}\n\n"
+                "Antes de continuar se creará automáticamente una copia "
+                "de seguridad del estado actual."
+            ),
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            result = self.backup_service.restore_backup(source)
+        except (OSError, sqlite3.Error, RuntimeError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo restaurar",
+                str(error),
+            )
+            return
+
+        self.refresh()
+        settings = self.service.get_settings()
+        self.settings_saved.emit(settings)
+
+        QMessageBox.information(
+            self,
+            "Restauración completada",
+            (
+                "El respaldo se restauró correctamente.\n\n"
+                "Copia automática del estado anterior:\n"
+                f"{result['safety_backup']}"
             ),
         )
