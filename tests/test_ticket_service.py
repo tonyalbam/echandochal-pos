@@ -95,6 +95,10 @@ class TicketServiceTest(unittest.TestCase):
             self.assertNotIn("Comision", text)
             self.assertNotIn("$6.40", text)
 
+            resources = reader.pages[0]["/Resources"]
+            self.assertIn("/XObject", resources)
+            self.assertGreater(len(resources["/XObject"]), 0)
+
     def test_cancelled_sale_ticket_shows_status(self) -> None:
         self.database.connection.execute(
             "UPDATE ventas SET cancelada = 1 WHERE id = ?",
