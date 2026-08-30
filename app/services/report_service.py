@@ -5,6 +5,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.database.connection import Database
+from app.services.configuration_service import ConfigurationService
 
 
 class ReportService:
@@ -165,7 +166,10 @@ class ReportService:
         money_format = '"$"#,##0.00'
 
         sheet.merge_cells("A1:F1")
-        sheet["A1"] = f"Echando Chal POS - Reporte financiero {year}"
+        business_name = ConfigurationService(
+            self.database
+        ).get_business_name()
+        sheet["A1"] = f"{business_name} POS - Reporte financiero {year}"
         sheet["A1"].fill = title_fill
         sheet["A1"].font = title_font
         sheet["A1"].alignment = Alignment(horizontal="center")
