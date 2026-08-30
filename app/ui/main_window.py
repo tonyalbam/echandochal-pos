@@ -18,6 +18,7 @@ from app.ui.purchase_window import PurchaseWindow
 from app.ui.purchase_history_window import PurchaseHistoryWindow
 from app.ui.dashboard_window import DashboardWindow
 from app.ui.configuration_window import ConfigurationWindow
+from app.ui.cash_closing_window import CashClosingWindow
 
 class MainWindow(QMainWindow):
     """Ventana principal de Echando Chal POS."""
@@ -56,6 +57,10 @@ class MainWindow(QMainWindow):
             self,
         )
         self.configuration_window = ConfigurationWindow(
+            self.database,
+            self,
+        )
+        self.cash_closing_window = CashClosingWindow(
             self.database,
             self,
         )
@@ -105,8 +110,9 @@ class MainWindow(QMainWindow):
             ("📥  Compras", 2),
             ("📜  Historial de ventas", 3),
             ("📋  Historial de compras", 4),
-            ("📈  Dashboard", 5),
-            ("⚙  Configuración", 6),
+            ("💰  Corte diario", 5),
+            ("📈  Dashboard", 6),
+            ("⚙  Configuración", 7),
         ]
 
         for texto, indice in botones:
@@ -142,6 +148,7 @@ class MainWindow(QMainWindow):
         pagina_compras = self.purchase_window
         pagina_historial = self.sale_history_window
         pagina_historial_compras = self.purchase_history_window
+        pagina_corte = self.cash_closing_window
         pagina_dashboard = self.dashboard_window
         pagina_configuracion = self.configuration_window
 
@@ -151,6 +158,7 @@ class MainWindow(QMainWindow):
         pagina_compras,
         pagina_historial,
         pagina_historial_compras,
+        pagina_corte,
         pagina_dashboard,
         pagina_configuracion,
         ]:
@@ -200,8 +208,10 @@ class MainWindow(QMainWindow):
         elif indice == 4:
             self.purchase_history_window.refresh()
         elif indice == 5:
-            self.dashboard_window.refresh()
+            self.cash_closing_window.refresh()
         elif indice == 6:
+            self.dashboard_window.refresh()
+        elif indice == 7:
             self.configuration_window.refresh()
 
     def _apply_settings(self, settings: dict) -> None:
