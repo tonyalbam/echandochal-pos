@@ -6,6 +6,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.database.connection import Database
+from app.services.configuration_service import ConfigurationService
 
 
 class SaleHistoryService:
@@ -189,7 +190,10 @@ class SaleHistoryService:
             period = f"{date_from or 'Inicio'} a {date_to or 'Hoy'}"
 
         sales_sheet.merge_cells("A1:L1")
-        sales_sheet["A1"] = "Echando Chal POS - Detalle de ventas"
+        business_name = ConfigurationService(
+            self.database
+        ).get_business_name()
+        sales_sheet["A1"] = f"{business_name} POS - Detalle de ventas"
         sales_sheet["A1"].fill = title_fill
         sales_sheet["A1"].font = Font(
             color="FFFFFF", bold=True, size=16
