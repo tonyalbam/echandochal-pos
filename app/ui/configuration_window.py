@@ -1,6 +1,10 @@
+from datetime import datetime
+import sqlite3
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QLabel,
@@ -13,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.configuration_service import ConfigurationService
+from app.services.backup_service import BackupService
 
 
 class ConfigurationWindow(QWidget):
@@ -23,6 +28,7 @@ class ConfigurationWindow(QWidget):
     def __init__(self, database: Database, parent=None) -> None:
         super().__init__(parent)
         self.service = ConfigurationService(database)
+        self.backup_service = BackupService(database)
         self._create_ui()
         self.refresh()
 
@@ -68,6 +74,31 @@ class ConfigurationWindow(QWidget):
         form.addRow("", save_button)
 
         layout.addWidget(card)
+
+        backup_card = QFrame()
+        backup_card.setStyleSheet(
+            "QFrame { border: 1px solid #d9d9d9; border-radius: 10px; }"
+        )
+        backup_layout = QVBoxLayout(backup_card)
+        backup_layout.setContentsMargins(24, 24, 24, 24)
+        backup_layout.setSpacing(12)
+
+        backup_title = QLabel("Respaldo de información")
+        backup_title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        backup_layout.addWidget(backup_title)
+        backup_layout.addWidget(
+            QLabel(
+                "Crea una copia validada de productos, ventas, compras "
+                "y configuración."
+            )
+        )
+
+        backup_button = QPushButton("Crear respaldo")
+        backup_button.setMinimumSize(160, 42)
+        backup_button.clicked.connect(self._create_backup)
+        backup_layout.addWidget(backup_button)
+
+        layout.addWidget(backup_card)
         layout.addStretch()
 
     def _save(self) -> None:
@@ -99,3 +130,36 @@ class ConfigurationWindow(QWidget):
         self.business_name.setText(settings["nombre_negocio"])
         self.commission.setValue(settings["comision_mercado_libre"])
         self.currency.setText(settings["moneda"])
+
+    def _create_backup(self) -> None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suggested_name = f"echandochal_respaldo_{timestamp}.db"
+
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Crear respaldo de la base de datos",
+            suggested_name,
+            "Base de datos SQLite (*.db)",
+        )
+
+        if not destination:
+            return
+
+        try:
+            output_path = self.backup_service.create_backup(destination)
+        except (OSError, sqlite3.Error, RuntimeError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo crear el respaldo",
+                f"No fue posible crear el respaldo:\n{error}",
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Respaldo creado",
+            (
+                "El respaldo se creó y validó correctamente en:\n"
+                f"{output_path}"
+            ),
+        )
