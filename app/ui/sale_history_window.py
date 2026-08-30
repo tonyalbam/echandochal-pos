@@ -1,7 +1,11 @@
-from PySide6.QtCore import Qt
+from datetime import datetime
+
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
+    QDateEdit,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -253,6 +257,34 @@ class SaleHistoryWindow(QWidget):
 
         layout.addLayout(controles)
 
+        periodo = QHBoxLayout()
+
+        self.filtrar_fechas = QCheckBox("Filtrar por fechas")
+        self.filtrar_fechas.stateChanged.connect(
+            self._actualizar_filtro_fechas
+        )
+        periodo.addWidget(self.filtrar_fechas)
+
+        periodo.addWidget(QLabel("Desde:"))
+        self.fecha_desde = QDateEdit()
+        self.fecha_desde.setCalendarPopup(True)
+        self.fecha_desde.setDisplayFormat("yyyy-MM-dd")
+        self.fecha_desde.setDate(QDate(datetime.now().year, 1, 1))
+        self.fecha_desde.dateChanged.connect(self._load_sales)
+        periodo.addWidget(self.fecha_desde)
+
+        periodo.addWidget(QLabel("Hasta:"))
+        self.fecha_hasta = QDateEdit()
+        self.fecha_hasta.setCalendarPopup(True)
+        self.fecha_hasta.setDisplayFormat("yyyy-MM-dd")
+        self.fecha_hasta.setDate(QDate.currentDate())
+        self.fecha_hasta.dateChanged.connect(self._load_sales)
+        periodo.addWidget(self.fecha_hasta)
+        periodo.addStretch()
+
+        layout.addLayout(periodo)
+        self._actualizar_filtro_fechas()
+
         self.tabla = QTableWidget(
             0,
             9,
@@ -318,6 +350,11 @@ class SaleHistoryWindow(QWidget):
 
         botones.addStretch()
 
+        self.exportar = QPushButton("Exportar Excel")
+        self.exportar.setMinimumSize(140, 40)
+        self.exportar.clicked.connect(self._exportar_excel)
+        botones.addWidget(self.exportar)
+
         self.detalle = QPushButton(
             "Ver detalle"
         )
@@ -357,11 +394,15 @@ class SaleHistoryWindow(QWidget):
         self._actualizar_botones()
 
     def _load_sales(self) -> None:
+        date_from, date_to = self._periodo_activo()
+
         self.sales = self.service.list_sales(
             search=self.buscar.text(),
             include_cancelled=(
                 self.mostrar_canceladas.isChecked()
             ),
+            date_from=date_from,
+            date_to=date_to,
         )
 
         self.tabla.setRowCount(0)
@@ -401,6 +442,65 @@ class SaleHistoryWindow(QWidget):
                 )
 
         self._actualizar_botones()
+
+    def _periodo_activo(self) -> tuple[str | None, str | None]:
+        if not self.filtrar_fechas.isChecked():
+            return None, None
+
+        return (
+            self.fecha_desde.date().toString("yyyy-MM-dd"),
+            self.fecha_hasta.date().toString("yyyy-MM-dd"),
+        )
+
+    def _actualizar_filtro_fechas(self) -> None:
+        enabled = self.filtrar_fechas.isChecked()
+        self.fecha_desde.setEnabled(enabled)
+        self.fecha_hasta.setEnabled(enabled)
+
+        if hasattr(self, "tabla"):
+            self._load_sales()
+
+    def _exportar_excel(self) -> None:
+        date_from, date_to = self._periodo_activo()
+
+        if date_from and date_to and date_from > date_to:
+            QMessageBox.warning(
+                self,
+                "Periodo no válido",
+                "La fecha inicial no puede ser posterior a la fecha final.",
+            )
+            return
+
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar detalle de ventas",
+            "detalle_ventas.xlsx",
+            "Archivos de Excel (*.xlsx)",
+        )
+        if not destination:
+            return
+
+        try:
+            output_path = self.service.export_sales_report(
+                destination=destination,
+                search=self.buscar.text(),
+                include_cancelled=self.mostrar_canceladas.isChecked(),
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except (OSError, PermissionError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo exportar",
+                f"No fue posible crear el reporte:\n{error}",
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Reporte exportado",
+            f"El reporte se guardó correctamente en:\n{output_path}",
+        )
 
     def _actualizar_botones(self) -> None:
         """Actualiza el estado de los botones según la venta seleccionada."""
