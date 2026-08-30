@@ -1,9 +1,11 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
+    QFileDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -99,8 +101,13 @@ class DashboardWindow(QWidget):
         refresh_button.setMinimumWidth(110)
         refresh_button.clicked.connect(self.refresh)
 
+        export_button = QPushButton("Exportar Excel")
+        export_button.setMinimumWidth(130)
+        export_button.clicked.connect(self.export_annual_report)
+
         header_layout.addLayout(title_container)
         header_layout.addStretch()
+        header_layout.addWidget(export_button)
         header_layout.addWidget(refresh_button)
 
         main_layout.addLayout(header_layout)
@@ -462,4 +469,41 @@ class DashboardWindow(QWidget):
         self.commission_chart.set_data(
             annual_data,
             year,
+        )
+
+    def export_annual_report(self) -> None:
+        """Solicita una ruta y exporta el reporte del año actual."""
+
+        year = datetime.now().year
+        suggested_name = f"reporte_financiero_{year}.xlsx"
+
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar reporte financiero anual",
+            suggested_name,
+            "Archivos de Excel (*.xlsx)",
+        )
+
+        if not destination:
+            return
+
+        try:
+            output_path = (
+                self.service.export_annual_financial_report(
+                    year,
+                    destination,
+                )
+            )
+        except (OSError, PermissionError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo exportar",
+                f"No fue posible crear el reporte:\n{error}",
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "Reporte exportado",
+            f"El reporte se guardó correctamente en:\n{output_path}",
         )
