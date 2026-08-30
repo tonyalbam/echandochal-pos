@@ -187,7 +187,6 @@ def create_database(db: Database) -> None:
         """
     )
 
-    _insertar_configuracion_inicial(db)
     # -------------------------------------------------
     # Migración: agregar costo_unitario a detalle_venta
     # -------------------------------------------------
