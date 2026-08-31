@@ -20,11 +20,15 @@ class DashboardService:
         anio = hoy[:4]
 
         top_product = self.get_top_selling_product_for_period(mes)
+        payment_sales = self.get_payment_sales_for_period(mes)
 
         return {
             "ventas_hoy": self.get_sales_for_period(hoy),
             "ventas_mes": self.get_sales_for_period(mes),
             "ventas_anio": self.get_sales_for_period(anio),
+            "ventas_efectivo_mes": payment_sales["Efectivo"],
+            "ventas_transferencia_mes": payment_sales["Transferencia"],
+            "ventas_mercado_libre_mes": payment_sales["Mercado Libre"],
             "utilidad_hoy": self.get_profit_for_period(hoy),
             "utilidad_mes": self.get_profit_for_period(mes),
             "utilidad_anio": self.get_profit_for_period(anio),
@@ -47,6 +51,35 @@ class DashboardService:
                 top_product["cantidad"] if top_product else 0.0
             ),
         }
+
+    def get_payment_sales_for_period(self, period: str) -> dict[str, float]:
+        """Obtiene ventas por forma de pago registrada en cada partida."""
+
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
+                SUM(
+                    CASE
+                        WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
+                        THEN v.total * dv.subtotal / v.subtotal
+                        ELSE dv.subtotal - dv.descuento
+                    END
+                ) AS ventas
+            FROM detalle_venta dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            WHERE v.cancelada = 0
+              AND v.fecha LIKE ?
+            GROUP BY COALESCE(dv.metodo_pago, v.metodo_pago)
+            """,
+            (f"{period}%",),
+        )
+        result = {method: 0.0 for method in self.report_service.PAYMENT_METHODS}
+        for row in cursor.fetchall():
+            if row["metodo_pago"] in result:
+                result[row["metodo_pago"]] = round(float(row["ventas"]), 2)
+        return result
 
     def get_sales_for_period(self, period: str) -> float:
         """Obtiene ventas no canceladas de un periodo."""
