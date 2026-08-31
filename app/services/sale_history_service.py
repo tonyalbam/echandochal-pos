@@ -63,11 +63,17 @@ class SaleHistoryService:
                 AND (
                     v.folio LIKE ?
                     OR v.metodo_pago LIKE ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM detalle_venta dv_search
+                        WHERE dv_search.venta_id = v.id
+                          AND dv_search.metodo_pago LIKE ?
+                    )
                 )
             """
 
             pattern = f"%{search}%"
-            parameters.extend([pattern, pattern])
+            parameters.extend([pattern, pattern, pattern])
 
         sql += """
             ORDER BY
@@ -130,8 +136,34 @@ class SaleHistoryService:
                 dv.precio_unitario,
                 dv.costo_unitario,
                 dv.descuento,
-                dv.subtotal
+                dv.subtotal,
+                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
+                COALESCE(
+                    dv.porcentaje_comision,
+                    v.porcentaje_comision,
+                    0
+                ) AS porcentaje_comision,
+                COALESCE(
+                    dv.monto_comision,
+                    CASE
+                        WHEN v.subtotal > 0
+                        THEN v.monto_comision * dv.subtotal / v.subtotal
+                        ELSE 0
+                    END,
+                    0
+                ) AS monto_comision,
+                COALESCE(
+                    dv.total_neto,
+                    (dv.subtotal - dv.descuento)
+                    - CASE
+                        WHEN v.subtotal > 0
+                        THEN v.monto_comision * dv.subtotal / v.subtotal
+                        ELSE 0
+                      END
+                ) AS total_neto
             FROM detalle_venta dv
+            INNER JOIN ventas v
+                ON v.id = dv.venta_id
             INNER JOIN productos p
                 ON p.id = dv.producto_id
             WHERE dv.venta_id = ?
@@ -215,7 +247,9 @@ class SaleHistoryService:
 
         item_headers = (
             "Folio", "Fecha", "Código", "Producto", "Cantidad",
-            "Precio unitario", "Costo unitario", "Importe", "Estado",
+            "Precio unitario", "Costo unitario", "Importe bruto",
+            "Descuento", "Forma de pago", "% comisión", "Comisión",
+            "Ingreso neto", "Estado",
         )
         for column, header in enumerate(item_headers, start=1):
             cell = items_sheet.cell(row=1, column=column, value=header)
@@ -249,14 +283,19 @@ class SaleHistoryService:
                     sale["folio"], sale["fecha"], item["codigo"],
                     item["nombre"], item["cantidad"],
                     item["precio_unitario"], item["costo_unitario"],
-                    item["subtotal"], status,
+                    item["subtotal"], item["descuento"],
+                    item["metodo_pago"],
+                    item["porcentaje_comision"] / 100,
+                    item["monto_comision"], item["total_neto"], status,
                 )
                 for column, value in enumerate(item_values, start=1):
                     cell = items_sheet.cell(
                         row=item_row, column=column, value=value
                     )
-                    if column in (6, 7, 8):
+                    if column in (6, 7, 8, 9, 12, 13):
                         cell.number_format = money_format
+                    elif column == 11:
+                        cell.number_format = "0.00%"
                 item_row += 1
 
         total_row = max(len(sales) + 6, 7)
@@ -277,10 +316,12 @@ class SaleHistoryService:
             sales_sheet.auto_filter.ref = f"A5:L{total_row - 1}"
         items_sheet.freeze_panes = "A2"
         if item_row > 2:
-            items_sheet.auto_filter.ref = f"A1:I{item_row - 1}"
+            items_sheet.auto_filter.ref = f"A1:N{item_row - 1}"
 
         sales_widths = (22, 13, 11, 19, 14, 14, 14, 13, 14, 15, 13, 11)
-        item_widths = (22, 13, 15, 34, 12, 16, 16, 14, 13)
+        item_widths = (
+            22, 13, 15, 30, 12, 16, 16, 15, 14, 19, 13, 14, 15, 13
+        )
         for column, width in enumerate(sales_widths, start=1):
             sales_sheet.column_dimensions[get_column_letter(column)].width = width
         for column, width in enumerate(item_widths, start=1):
