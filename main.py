@@ -14,8 +14,14 @@ def main() -> int:
         """
         QTableView {
             qproperty-alternatingRowColors: true;
-            alternate-background-color: #F2F7FB;
-            background-color: #FFFFFF;
+            background-color: palette(window);
+            alternate-background-color: rgba(74, 144, 184, 45);
+            color: palette(window-text);
+            gridline-color: palette(mid);
+        }
+        QTableView::item:selected {
+            background-color: #2F75B5;
+            color: #FFFFFF;
         }
         """
     )
