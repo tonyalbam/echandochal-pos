@@ -79,7 +79,7 @@ class SaleService:
     def create_sale(
         self,
         items: list[dict],
-        payment_method: str,
+        payment_method: str | None = None,
         discount: float = 0.0,
         user_id: Optional[int] = None,
     ) -> dict:
@@ -94,9 +94,6 @@ class SaleService:
 
         if not items:
             raise ValueError("La venta no contiene productos.")
-
-        if payment_method not in self.PAYMENT_METHODS:
-            raise ValueError("El método de pago no es válido.")
 
         discount = float(discount or 0)
 
@@ -114,20 +111,48 @@ class SaleService:
             )
 
         total = round(subtotal - discount, 2)
+        default_method = payment_method or "Efectivo"
+        commission_rate = self.get_commission_rate()
+        prepared_items = []
+        allocated_discount = 0.0
+        for index, item in enumerate(items):
+            method = item.get("metodo_pago") or default_method
+            if method not in self.PAYMENT_METHODS:
+                raise ValueError("El método de pago no es válido.")
+            line_subtotal = round(
+                float(item["cantidad"]) * float(item["precio_unitario"]), 2
+            )
+            if index == len(items) - 1:
+                line_discount = round(discount - allocated_discount, 2)
+            elif subtotal:
+                line_discount = round(
+                    discount * line_subtotal / subtotal, 2
+                )
+                allocated_discount += line_discount
+            else:
+                line_discount = 0.0
+            line_total = round(line_subtotal - line_discount, 2)
+            rate = commission_rate if method == "Mercado Libre" else 0.0
+            line_commission = round(line_total * rate / 100, 2)
+            prepared_items.append({
+                **item,
+                "metodo_pago": method,
+                "subtotal": line_subtotal,
+                "descuento": line_discount,
+                "porcentaje_comision": rate,
+                "monto_comision": line_commission,
+                "total_neto": round(line_total - line_commission, 2),
+            })
 
-        if payment_method == "Mercado Libre":
-            commission_rate = self.get_commission_rate()
-        else:
-            commission_rate = 0.0
-
+        methods = {item["metodo_pago"] for item in prepared_items}
+        sale_payment_method = methods.pop() if len(methods) == 1 else "Mixto"
         commission = round(
-            total * commission_rate / 100,
-            2,
+            sum(item["monto_comision"] for item in prepared_items), 2
         )
-
-        total_net = round(
-            total - commission,
-            2,
+        total_net = round(total - commission, 2)
+        sale_commission_rate = round(
+            (commission / total * 100) if total > 0 else 0.0,
+            4,
         )
 
         now = datetime.now()
@@ -203,8 +228,8 @@ class SaleService:
                     subtotal,
                     discount,
                     total,
-                    payment_method,
-                    commission_rate,
+                    sale_payment_method,
+                    sale_commission_rate,
                     commission,
                     total_net,
                     user_id,
@@ -214,15 +239,12 @@ class SaleService:
             sale_id = int(cursor.lastrowid)
 
             # Detalle + actualización de inventario.
-            for item in items:
+            for item in prepared_items:
                 product_id = int(item["producto_id"])
                 quantity = float(item["cantidad"])
                 unit_price = float(item["precio_unitario"])
 
-                line_subtotal = round(
-                    quantity * unit_price,
-                    2,
-                )
+                line_subtotal = item["subtotal"]
 
                 cursor.execute(
                     """
@@ -245,9 +267,13 @@ class SaleService:
                         precio_unitario,
                         costo_unitario,
                         descuento,
-                        subtotal
+                        subtotal,
+                        metodo_pago,
+                        porcentaje_comision,
+                        monto_comision,
+                        total_neto
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                     (
                         sale_id,
@@ -255,8 +281,12 @@ class SaleService:
                         quantity,
                         unit_price,
                         product_cost,
-                        0,
+                        item["descuento"],
                         line_subtotal,
+                        item["metodo_pago"],
+                        item["porcentaje_comision"],
+                        item["monto_comision"],
+                        item["total_neto"],
                         ),
                     )
 
@@ -327,8 +357,8 @@ class SaleService:
             "subtotal": round(subtotal, 2),
             "descuento": round(discount, 2),
             "total": total,
-            "metodo_pago": payment_method,
-            "porcentaje_comision": commission_rate,
+            "metodo_pago": sale_payment_method,
+            "porcentaje_comision": sale_commission_rate,
             "monto_comision": commission,
             "total_neto": total_net,
         }
