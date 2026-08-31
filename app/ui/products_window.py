@@ -2,6 +2,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.product_service import ProductService
+from app.services.label_service import LabelService
 from app.ui.product_dialog import ProductDialog
 
 
@@ -25,6 +27,7 @@ class ProductsWindow(QWidget):
 
         self.database = database
         self.service = ProductService(database)
+        self.label_service = LabelService(database)
 
         self._create_ui()
         self._load_products()
@@ -61,7 +64,7 @@ class ProductsWindow(QWidget):
         search_label = QLabel("Buscar:")
         self.search = QLineEdit()
         self.search.setPlaceholderText(
-            "Nombre, código interno o código de barras..."
+            "Nombre, código interno, código de barras o QR..."
         )
         self.search.textChanged.connect(self._load_products)
 
@@ -72,12 +75,13 @@ class ProductsWindow(QWidget):
 
         self.table = QTableWidget()
 
-        self.table.setColumnCount(12)
+        self.table.setColumnCount(13)
 
         self.table.setHorizontalHeaderLabels(
             [
                 "Código",
                 "Código de barras",
+                "Código QR",
                 "Producto",
                 "Categoría",
                 "Marca",
@@ -117,8 +121,12 @@ class ProductsWindow(QWidget):
         deactivate_button = QPushButton("Desactivar")
         deactivate_button.clicked.connect(self._deactivate_selected)
 
+        label_button = QPushButton("Generar etiqueta")
+        label_button.clicked.connect(self._generate_label)
+
         buttons.addWidget(edit_button)
         buttons.addWidget(deactivate_button)
+        buttons.addWidget(label_button)
         buttons.addStretch()
 
         layout.addLayout(buttons)
@@ -136,6 +144,7 @@ class ProductsWindow(QWidget):
             values = [
                 product["codigo"],
                 product["codigo_barras"] or "",
+                product["codigo_qr"] or "",
                 product["nombre"],
                 product["categoria"],
                 product["marca"],
@@ -151,7 +160,7 @@ class ProductsWindow(QWidget):
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
 
-                if column in (7, 8, 9, 10):
+                if column in (8, 9, 10, 11):
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight
                         | Qt.AlignmentFlag.AlignVCenter
@@ -286,4 +295,47 @@ class ProductsWindow(QWidget):
             self,
             "Reporte exportado",
             f"El reporte se guardó correctamente en:\n{output_path}",
+        )
+
+    def _generate_label(self) -> None:
+        product_id = self._selected_product_id()
+        if product_id is None:
+            QMessageBox.information(
+                self,
+                "Selecciona un producto",
+                "Selecciona el producto para generar su etiqueta.",
+            )
+            return
+
+        format_name, accepted = QInputDialog.getItem(
+            self,
+            "Formato de etiqueta",
+            "Contenido:",
+            LabelService.FORMATS,
+            2,
+            False,
+        )
+        if not accepted:
+            return
+
+        product = self.service.get_product(product_id)
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar etiqueta",
+            f"etiqueta_{product['codigo']}.pdf",
+            "Documento PDF (*.pdf)",
+        )
+        if not destination:
+            return
+        try:
+            output_path = self.label_service.generate_product_label(
+                product_id, destination, format_name
+            )
+        except (OSError, ValueError) as error:
+            QMessageBox.critical(self, "No se pudo generar", str(error))
+            return
+        QMessageBox.information(
+            self,
+            "Etiqueta generada",
+            f"La etiqueta se guardó correctamente en:\n{output_path}",
         )
