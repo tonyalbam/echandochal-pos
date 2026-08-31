@@ -128,7 +128,6 @@ class ProductDialog(QDialog):
 
     def _load_catalogs(self) -> None:
         self.categoria.clear()
-        self.categoria.addItem("Sin categoría", None)
 
         for category in self.product_service.get_categories():
             self.categoria.addItem(
