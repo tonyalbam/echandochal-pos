@@ -99,6 +99,10 @@ def create_database(db: Database) -> None:
             costo_unitario REAL NOT NULL DEFAULT 0,
             descuento REAL NOT NULL DEFAULT 0,
             subtotal REAL NOT NULL,
+            metodo_pago TEXT,
+            porcentaje_comision REAL,
+            monto_comision REAL,
+            total_neto REAL,
 
             FOREIGN KEY (venta_id)
                 REFERENCES ventas(id),
@@ -208,6 +212,26 @@ def create_database(db: Database) -> None:
             REAL NOT NULL DEFAULT 0
             """
         )
+
+    # Migración: forma de pago y comisión por partida de venta.
+    detail_columns = {
+        column[1]
+        for column in cursor.execute(
+            "PRAGMA table_info(detalle_venta)"
+        ).fetchall()
+    }
+    detail_migrations = {
+        "metodo_pago": "TEXT",
+        "porcentaje_comision": "REAL",
+        "monto_comision": "REAL",
+        "total_neto": "REAL",
+    }
+    for column_name, column_type in detail_migrations.items():
+        if column_name not in detail_columns:
+            cursor.execute(
+                f"ALTER TABLE detalle_venta "
+                f"ADD COLUMN {column_name} {column_type}"
+            )
     _insertar_configuracion_inicial(db)
 
     db.commit()
