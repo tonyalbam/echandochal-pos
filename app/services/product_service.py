@@ -34,6 +34,7 @@ class ProductService:
                     p.id,
                     p.codigo,
                     p.codigo_barras,
+                    p.codigo_qr,
                     p.nombre,
                     COALESCE(c.nombre, '') AS categoria,
                     COALESCE(p.marca, '') AS marca,
@@ -54,13 +55,14 @@ class ProductService:
                   AND (
                       p.codigo LIKE ?
                       OR COALESCE(p.codigo_barras, '') LIKE ?
+                      OR COALESCE(p.codigo_qr, '') LIKE ?
                       OR p.nombre LIKE ?
                       OR COALESCE(p.marca, '') LIKE ?
                       OR COALESCE(p.color, '') LIKE ?
                   )
                 ORDER BY p.nombre COLLATE NOCASE
                 """,
-                (pattern, pattern, pattern, pattern, pattern),
+                (pattern, pattern, pattern, pattern, pattern, pattern),
             )
         else:
             cursor.execute(
@@ -69,6 +71,7 @@ class ProductService:
                     p.id,
                     p.codigo,
                     p.codigo_barras,
+                    p.codigo_qr,
                     p.nombre,
                     COALESCE(c.nombre, '') AS categoria,
                     COALESCE(p.marca, '') AS marca,
@@ -123,6 +126,7 @@ class ProductService:
             INSERT INTO productos (
                 codigo,
                 codigo_barras,
+                codigo_qr,
                 nombre,
                 categoria_id,
                 marca,
@@ -134,11 +138,12 @@ class ProductService:
                 stock_minimo,
                 proveedor_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["codigo"],
                 data.get("codigo_barras") or None,
+                data.get("codigo_qr") or None,
                 data["nombre"],
                 data.get("categoria_id"),
                 data.get("marca") or None,
@@ -167,6 +172,7 @@ class ProductService:
             SET
                 codigo = ?,
                 codigo_barras = ?,
+                codigo_qr = ?,
                 nombre = ?,
                 categoria_id = ?,
                 marca = ?,
@@ -183,6 +189,7 @@ class ProductService:
             (
                 data["codigo"],
                 data.get("codigo_barras") or None,
+                data.get("codigo_qr") or None,
                 data["nombre"],
                 data.get("categoria_id"),
                 data.get("marca") or None,
