@@ -39,6 +39,7 @@ def create_database(db: Database) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             codigo TEXT NOT NULL UNIQUE,
             codigo_barras TEXT UNIQUE,
+            codigo_qr TEXT UNIQUE,
             nombre TEXT NOT NULL,
             categoria_id INTEGER,
             marca TEXT,
@@ -243,6 +244,24 @@ def create_database(db: Database) -> None:
     if "direccion" not in supplier_columns:
         cursor.execute(
             "ALTER TABLE proveedores ADD COLUMN direccion TEXT"
+        )
+
+    product_columns = {
+        column[1]
+        for column in cursor.execute(
+            "PRAGMA table_info(productos)"
+        ).fetchall()
+    }
+    if "codigo_qr" not in product_columns:
+        cursor.execute(
+            "ALTER TABLE productos ADD COLUMN codigo_qr TEXT"
+        )
+        cursor.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_productos_codigo_qr
+            ON productos(codigo_qr)
+            WHERE codigo_qr IS NOT NULL
+            """
         )
     _insertar_configuracion_inicial(db)
     _insertar_categorias_iniciales(db)
