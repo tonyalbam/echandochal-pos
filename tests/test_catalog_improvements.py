@@ -1,10 +1,15 @@
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
+
+from pypdf import PdfReader
 
 from app.database.schema import create_database
 from app.services.product_service import ProductService
 from app.services.sale_service import SaleService
 from app.services.supplier_service import SupplierService
+from app.services.label_service import LabelService
 
 
 class MemoryDatabase:
@@ -46,18 +51,46 @@ class CatalogImprovementsTest(unittest.TestCase):
         cursor.execute(
             """
             INSERT INTO productos (
-                codigo, codigo_barras, nombre, marca, color,
+                codigo, codigo_barras, codigo_qr, nombre, marca, color,
                 costo, precio, existencia
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("ALG-001", "750123456", "Estambre Primavera", "Nube", "Azul", 20, 45, 8),
+            (
+                "ALG-001", "750123456", "QR-FABRICA-001",
+                "Estambre Primavera", "Nube", "Azul", 20, 45, 8,
+            ),
         )
         self.database.commit()
         service = SaleService(self.database)
-        for query in ("ALG", "750123", "Primavera", "Nube"):
+        for query in ("ALG", "750123", "QR-FABRICA", "Primavera", "Nube"):
             matches = service.search_products(query)
             self.assertEqual(matches[0]["codigo"], "ALG-001")
             self.assertEqual(matches[0]["color"], "Azul")
+        self.assertEqual(
+            service.find_product("QR-FABRICA-001")["codigo"], "ALG-001"
+        )
+
+    def test_generates_scannable_barcode_and_qr_label(self) -> None:
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            INSERT INTO productos (
+                codigo, nombre, marca, costo, precio, existencia
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("ECH-QR-01", "Producto con etiqueta", "Echando Chal", 10, 25, 4),
+        )
+        product_id = int(cursor.lastrowid)
+        self.database.commit()
+        with tempfile.TemporaryDirectory() as directory:
+            output = LabelService(self.database).generate_product_label(
+                product_id, Path(directory) / "etiqueta", "Ambos"
+            )
+            self.assertTrue(output.is_file())
+            reader = PdfReader(output)
+            self.assertEqual(len(reader.pages), 1)
+            self.assertAlmostEqual(float(reader.pages[0].mediabox.width), 80 / 25.4 * 72, places=1)
+            self.assertAlmostEqual(float(reader.pages[0].mediabox.height), 50 / 25.4 * 72, places=1)
 
     def test_supplier_crud_saves_name_address_and_phone(self) -> None:
         service = SupplierService(self.database)
