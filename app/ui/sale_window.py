@@ -22,6 +22,14 @@ from app.services.sale_service import SaleService
 from app.services.ticket_service import TicketService
 
 
+class ClearOnFocusLineEdit(QLineEdit):
+    """Limpia la búsqueda anterior al iniciar una nueva captura."""
+
+    def focusInEvent(self, event) -> None:
+        self.clear()
+        super().focusInEvent(event)
+
+
 class SaleWindow(QWidget):
     """Pantalla de captura y cobro de ventas."""
 
@@ -61,7 +69,7 @@ class SaleWindow(QWidget):
 
         entrada_layout = QHBoxLayout()
 
-        self.codigo_input = QLineEdit()
+        self.codigo_input = ClearOnFocusLineEdit()
         self.codigo_input.setPlaceholderText(
             "Código, código de barras, nombre o marca"
         )
