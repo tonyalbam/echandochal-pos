@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -121,11 +122,29 @@ class DashboardWindow(QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(22)
 
+        tabs = QTabWidget()
+        content_layout.addWidget(tabs)
+
+        def add_tab(name: str) -> QVBoxLayout:
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(14, 14, 14, 14)
+            page_layout.setSpacing(14)
+            tabs.addTab(page, name)
+            return page_layout
+
+        sales_layout = add_tab("Ventas")
+        net_layout = add_tab("Ingreso neto y comisiones")
+        profit_layout = add_tab("Utilidad")
+        operation_layout = add_tab("Operación")
+        kpi_layout = add_tab("Indicadores clave")
+        chart_tab_layout = add_tab("Gráficas anuales")
+
         # ---------------------------------------------------------
         # Ventas
         # ---------------------------------------------------------
 
-        content_layout.addWidget(
+        sales_layout.addWidget(
             self._section_title("Ventas")
         )
 
@@ -147,6 +166,16 @@ class DashboardWindow(QWidget):
             subtitle="Importe bruto vendido",
         )
 
+        self.cards["ventas_efectivo_mes"] = StatCard(
+            "Efectivo del mes", subtitle="Partidas cobradas en efectivo"
+        )
+        self.cards["ventas_transferencia_mes"] = StatCard(
+            "Transferencias del mes", subtitle="Partidas por transferencia"
+        )
+        self.cards["ventas_mercado_libre_mes"] = StatCard(
+            "Mercado Libre del mes", subtitle="Partidas por Mercado Libre"
+        )
+
         sales_grid.addWidget(
             self.cards["ventas_hoy"], 0, 0
         )
@@ -156,14 +185,18 @@ class DashboardWindow(QWidget):
         sales_grid.addWidget(
             self.cards["ventas_anio"], 0, 2
         )
+        sales_grid.addWidget(self.cards["ventas_efectivo_mes"], 1, 0)
+        sales_grid.addWidget(self.cards["ventas_transferencia_mes"], 1, 1)
+        sales_grid.addWidget(self.cards["ventas_mercado_libre_mes"], 1, 2)
 
-        content_layout.addLayout(sales_grid)
+        sales_layout.addLayout(sales_grid)
+        sales_layout.addStretch()
 
         # ---------------------------------------------------------
         # Ingreso neto y comisiones
         # ---------------------------------------------------------
 
-        content_layout.addWidget(
+        net_layout.addWidget(
             self._section_title(
                 "Ingreso neto y comisiones"
             )
@@ -205,13 +238,14 @@ class DashboardWindow(QWidget):
             self.cards["comisiones_mes"], 1, 0
         )
 
-        content_layout.addLayout(net_grid)
+        net_layout.addLayout(net_grid)
+        net_layout.addStretch()
 
         # ---------------------------------------------------------
         # Utilidad
         # ---------------------------------------------------------
 
-        content_layout.addWidget(
+        profit_layout.addWidget(
             self._section_title("Utilidad")
         )
 
@@ -243,13 +277,14 @@ class DashboardWindow(QWidget):
             self.cards["utilidad_anio"], 0, 2
         )
 
-        content_layout.addLayout(profit_grid)
+        profit_layout.addLayout(profit_grid)
+        profit_layout.addStretch()
 
         # ---------------------------------------------------------
         # Operación
         # ---------------------------------------------------------
 
-        content_layout.addWidget(
+        operation_layout.addWidget(
             self._section_title("Operación")
         )
 
@@ -291,13 +326,14 @@ class DashboardWindow(QWidget):
             self.cards["stock_bajo"], 0, 3
         )
 
-        content_layout.addLayout(operation_grid)
+        operation_layout.addLayout(operation_grid)
+        operation_layout.addStretch()
 
         # ---------------------------------------------------------
         # Indicadores clave del mes
         # ---------------------------------------------------------
 
-        content_layout.addWidget(
+        kpi_layout.addWidget(
             self._section_title("Indicadores clave del mes")
         )
 
@@ -332,7 +368,8 @@ class DashboardWindow(QWidget):
             self.cards["producto_mas_vendido"], 0, 2
         )
 
-        content_layout.addLayout(kpi_grid)
+        kpi_layout.addLayout(kpi_grid)
+        kpi_layout.addStretch()
 
         # ---------------------------------------------------------
         # Gráfica anual
@@ -353,7 +390,7 @@ class DashboardWindow(QWidget):
         charts_layout.addWidget(charts_title)
         charts_layout.addWidget(self.annual_chart)
 
-        content_layout.addWidget(charts_container)
+        chart_tab_layout.addWidget(charts_container)
         commission_container = QFrame()
         commission_container.setObjectName("chartsPlaceholder")
 
@@ -382,10 +419,10 @@ class DashboardWindow(QWidget):
             self.commission_chart
         )
 
-        content_layout.addWidget(
+        chart_tab_layout.addWidget(
             commission_container
         )
-        content_layout.addStretch()
+        chart_tab_layout.addStretch()
 
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
@@ -458,6 +495,9 @@ class DashboardWindow(QWidget):
             "ventas_hoy",
             "ventas_mes",
             "ventas_anio",
+            "ventas_efectivo_mes",
+            "ventas_transferencia_mes",
+            "ventas_mercado_libre_mes",
             "utilidad_hoy",
             "utilidad_mes",
             "utilidad_anio",
