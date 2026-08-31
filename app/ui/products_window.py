@@ -72,7 +72,7 @@ class ProductsWindow(QWidget):
 
         self.table = QTableWidget()
 
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(12)
 
         self.table.setHorizontalHeaderLabels(
             [
@@ -81,7 +81,10 @@ class ProductsWindow(QWidget):
                 "Producto",
                 "Categoría",
                 "Marca",
-                "Precio",
+                "Color",
+                "Unidad",
+                "Costo",
+                "Precio de venta",
                 "Existencia",
                 "Stock mínimo",
                 "Estado",
@@ -136,6 +139,9 @@ class ProductsWindow(QWidget):
                 product["nombre"],
                 product["categoria"],
                 product["marca"],
+                product["color"],
+                product["unidad"],
+                f'$ {product["costo"]:,.2f}',
                 f'$ {product["precio"]:,.2f}',
                 f'{product["existencia"]:,.3f}',
                 f'{product["stock_minimo"]:,.3f}',
@@ -145,7 +151,7 @@ class ProductsWindow(QWidget):
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
 
-                if column in (5, 6, 7):
+                if column in (7, 8, 9, 10):
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight
                         | Qt.AlignmentFlag.AlignVCenter
