@@ -126,12 +126,15 @@ class CashClosingServiceTest(unittest.TestCase):
             workbook.close()
 
             reader = PdfReader(pdf_path)
-            self.assertEqual(len(reader.pages), 1)
-            text = reader.pages[0].extract_text()
+            self.assertGreaterEqual(len(reader.pages), 1)
+            text = "\n".join(
+                page.extract_text() or "" for page in reader.pages
+            )
             self.assertIn("Corte diario - 2026-08-30", text)
             self.assertIn("TOTAL VENTAS", text)
             self.assertIn("$600.00", text)
             self.assertIn("Utilidad del día", text)
+            self.assertIn("Arqueo manual de efectivo", text)
 
 
 if __name__ == "__main__":
