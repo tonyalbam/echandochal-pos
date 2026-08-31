@@ -52,7 +52,12 @@ class ProductDialog(QDialog):
             "Escanea el código de barras aquí"
         )
 
+        self.codigo_qr = QLineEdit()
+        self.codigo_qr.setPlaceholderText("Escanea el código QR existente aquí")
+
         self.nombre = QLineEdit()
+        self.codigo_barras.returnPressed.connect(self.codigo_qr.setFocus)
+        self.codigo_qr.returnPressed.connect(self.nombre.setFocus)
 
         self.categoria = QComboBox()
         self.categoria.setEditable(False)
@@ -84,6 +89,7 @@ class ProductDialog(QDialog):
 
         form.addRow("Código interno:", self.codigo)
         form.addRow("Código de barras:", self.codigo_barras)
+        form.addRow("Código QR:", self.codigo_qr)
         form.addRow("Nombre:", self.nombre)
         form.addRow("Categoría:", self.categoria)
         form.addRow("Marca:", self.marca)
@@ -147,6 +153,7 @@ class ProductDialog(QDialog):
     def _load_product(self, product: dict) -> None:
         self.codigo.setText(product["codigo"])
         self.codigo_barras.setText(product["codigo_barras"] or "")
+        self.codigo_qr.setText(product["codigo_qr"] or "")
         self.nombre.setText(product["nombre"])
         self.marca.setText(product["marca"] or "")
         self.color.setText(product["color"] or "")
@@ -202,6 +209,7 @@ class ProductDialog(QDialog):
         data = {
             "codigo": codigo,
             "codigo_barras": self.codigo_barras.text().strip(),
+            "codigo_qr": self.codigo_qr.text().strip(),
             "nombre": nombre,
             "categoria_id": self.categoria.currentData(),
             "marca": self.marca.text().strip(),
