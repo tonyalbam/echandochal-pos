@@ -19,6 +19,7 @@ from app.ui.purchase_history_window import PurchaseHistoryWindow
 from app.ui.dashboard_window import DashboardWindow
 from app.ui.configuration_window import ConfigurationWindow
 from app.ui.cash_closing_window import CashClosingWindow
+from app.ui.supplier_window import SupplierWindow
 
 class MainWindow(QMainWindow):
     """Ventana principal de Echando Chal POS."""
@@ -40,6 +41,7 @@ class MainWindow(QMainWindow):
           self.database,
         self,
         )
+        self.supplier_window = SupplierWindow(self.database, self)
         self.sale_window = SaleWindow(
             self.database,
             self,
@@ -107,12 +109,13 @@ class MainWindow(QMainWindow):
         botones = [
             ("🛒  Nueva venta", 0),
             ("📦  Productos", 1),
-            ("📥  Compras", 2),
-            ("📜  Historial de ventas", 3),
-            ("📋  Historial de compras", 4),
-            ("💰  Corte diario", 5),
-            ("📈  Dashboard", 6),
-            ("⚙  Configuración", 7),
+            ("🏭  Proveedores", 2),
+            ("📥  Compras", 3),
+            ("📜  Historial de ventas", 4),
+            ("📋  Historial de compras", 5),
+            ("💰  Corte diario", 6),
+            ("📈  Dashboard", 7),
+            ("⚙  Configuración", 8),
         ]
 
         for texto, indice in botones:
@@ -145,6 +148,7 @@ class MainWindow(QMainWindow):
 
         pagina_venta = self.sale_window
         pagina_productos = self.products_window
+        pagina_proveedores = self.supplier_window
         pagina_compras = self.purchase_window
         pagina_historial = self.sale_history_window
         pagina_historial_compras = self.purchase_history_window
@@ -155,6 +159,7 @@ class MainWindow(QMainWindow):
         for pagina in [
         pagina_venta,
         pagina_productos,
+        pagina_proveedores,
         pagina_compras,
         pagina_historial,
         pagina_historial_compras,
@@ -201,17 +206,20 @@ class MainWindow(QMainWindow):
             self.products_window._load_products()
 
         elif indice == 2:
-            self.purchase_window.refresh()
+            self.supplier_window.refresh()
 
         elif indice == 3:
-            self.sale_history_window.refresh()
+            self.purchase_window.refresh()
+
         elif indice == 4:
-            self.purchase_history_window.refresh()
+            self.sale_history_window.refresh()
         elif indice == 5:
-            self.cash_closing_window.refresh()
+            self.purchase_history_window.refresh()
         elif indice == 6:
-            self.dashboard_window.refresh()
+            self.cash_closing_window.refresh()
         elif indice == 7:
+            self.dashboard_window.refresh()
+        elif indice == 8:
             self.configuration_window.refresh()
 
     def _apply_settings(self, settings: dict) -> None:
