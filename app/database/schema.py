@@ -28,6 +28,7 @@ def create_database(db: Database) -> None:
         CREATE TABLE IF NOT EXISTS proveedores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT NOT NULL,
+            direccion TEXT,
             telefono TEXT,
             correo TEXT,
             notas TEXT,
@@ -232,7 +233,19 @@ def create_database(db: Database) -> None:
                 f"ALTER TABLE detalle_venta "
                 f"ADD COLUMN {column_name} {column_type}"
             )
+
+    supplier_columns = {
+        column[1]
+        for column in cursor.execute(
+            "PRAGMA table_info(proveedores)"
+        ).fetchall()
+    }
+    if "direccion" not in supplier_columns:
+        cursor.execute(
+            "ALTER TABLE proveedores ADD COLUMN direccion TEXT"
+        )
     _insertar_configuracion_inicial(db)
+    _insertar_categorias_iniciales(db)
 
     db.commit()
 
@@ -253,4 +266,27 @@ def _insertar_configuracion_inicial(db: Database) -> None:
             VALUES (?, ?)
             """,
             (clave, valor),
+        )
+
+
+def _insertar_categorias_iniciales(db: Database) -> None:
+    categories = (
+        "Algodón",
+        "Acrílico",
+        "Combinado",
+        "Clases",
+        "Mercería",
+        "Pedidos personalizados",
+        "Talleres",
+        "Patrones",
+    )
+    cursor = db.cursor()
+    for category in categories:
+        cursor.execute(
+            """
+            INSERT INTO categorias (nombre, activo)
+            VALUES (?, 1)
+            ON CONFLICT(nombre) DO UPDATE SET activo = 1
+            """,
+            (category,),
         )
