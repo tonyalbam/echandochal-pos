@@ -36,7 +36,8 @@ class SaleService:
                 p.existencia,
                 p.stock_minimo,
                 COALESCE(c.nombre, '') AS categoria,
-                COALESCE(p.marca, '') AS marca
+                COALESCE(p.marca, '') AS marca,
+                COALESCE(p.color, '') AS color
             FROM productos p
             LEFT JOIN categorias c
                 ON c.id = p.categoria_id
@@ -53,6 +54,47 @@ class SaleService:
         row = cursor.fetchone()
 
         return dict(row) if row else None
+
+    def search_products(self, query: str, limit: int = 20) -> list[dict]:
+        """Busca coincidencias para la captura predictiva de ventas."""
+
+        query = query.strip()
+        if not query:
+            return []
+        pattern = f"%{query}%"
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT
+                p.id, p.codigo, p.codigo_barras, p.nombre,
+                p.precio, p.existencia, p.stock_minimo,
+                COALESCE(p.marca, '') AS marca,
+                COALESCE(p.color, '') AS color,
+                COALESCE(c.nombre, '') AS categoria
+            FROM productos p
+            LEFT JOIN categorias c ON c.id = p.categoria_id
+            WHERE p.activo = 1
+              AND (
+                  p.codigo LIKE ?
+                  OR COALESCE(p.codigo_barras, '') LIKE ?
+                  OR p.nombre LIKE ?
+                  OR COALESCE(p.marca, '') LIKE ?
+              )
+            ORDER BY
+                CASE
+                    WHEN p.codigo = ? OR p.codigo_barras = ? THEN 0
+                    WHEN p.nombre LIKE ? THEN 1
+                    ELSE 2
+                END,
+                p.nombre COLLATE NOCASE
+            LIMIT ?
+            """,
+            (
+                pattern, pattern, pattern, pattern,
+                query, query, f"{query}%", int(limit),
+            ),
+        )
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_commission_rate(self) -> float:
         """Obtiene la comisión configurada para Mercado Libre."""
