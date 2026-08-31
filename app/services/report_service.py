@@ -10,6 +10,7 @@ from app.services.configuration_service import ConfigurationService
 
 class ReportService:
     """Consultas y cálculos para reportes financieros."""
+    PAYMENT_METHODS = ("Efectivo", "Transferencia", "Mercado Libre")
 
     def __init__(self, database: Database) -> None:
         self.database = database
@@ -29,20 +30,24 @@ class ReportService:
             """
             SELECT
                 substr(v.fecha, 6, 2) AS mes,
-                COALESCE(SUM(v.total), 0) AS ventas,
-                COALESCE(SUM(v.monto_comision), 0) AS comisiones,
-                COALESCE(SUM(costos.costo), 0) AS costo
+                COALESCE(SUM(
+                    CASE
+                        WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
+                        THEN v.total * dv.subtotal / v.subtotal
+                        ELSE dv.subtotal - dv.descuento
+                    END
+                ), 0) AS ventas,
+                COALESCE(SUM(
+                    COALESCE(
+                        dv.monto_comision,
+                        CASE WHEN v.subtotal > 0
+                            THEN v.monto_comision * dv.subtotal / v.subtotal
+                            ELSE 0 END
+                    )
+                ), 0) AS comisiones,
+                COALESCE(SUM(dv.cantidad * dv.costo_unitario), 0) AS costo
             FROM ventas v
-            LEFT JOIN (
-                SELECT
-                    venta_id,
-                    SUM(
-                        cantidad * costo_unitario
-                    ) AS costo
-                FROM detalle_venta
-                GROUP BY venta_id
-            ) costos
-                ON costos.venta_id = v.id
+            INNER JOIN detalle_venta dv ON dv.venta_id = v.id
             WHERE v.cancelada = 0
               AND substr(v.fecha, 1, 4) = ?
             GROUP BY substr(v.fecha, 6, 2)
@@ -52,6 +57,49 @@ class ReportService:
         )
 
         rows = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
+                COALESCE(SUM(
+                    CASE
+                        WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
+                        THEN v.total * dv.subtotal / v.subtotal
+                        ELSE dv.subtotal - dv.descuento
+                    END
+                ), 0) AS ventas,
+                COALESCE(SUM(
+                    COALESCE(
+                        dv.monto_comision,
+                        CASE WHEN v.subtotal > 0
+                            THEN v.monto_comision * dv.subtotal / v.subtotal
+                            ELSE 0 END
+                    )
+                ), 0) AS comisiones
+            FROM detalle_venta dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            WHERE v.cancelada = 0
+              AND substr(v.fecha, 1, 4) = ?
+            GROUP BY COALESCE(dv.metodo_pago, v.metodo_pago)
+            """,
+            (str(year),),
+        )
+        payment_rows = {
+            row["metodo_pago"]: dict(row)
+            for row in cursor.fetchall()
+        }
+        payments = []
+        for method in self.PAYMENT_METHODS:
+            values = payment_rows.get(method, {})
+            sales = round(float(values.get("ventas", 0)), 2)
+            commissions = round(float(values.get("comisiones", 0)), 2)
+            payments.append({
+                "metodo_pago": method,
+                "ventas": sales,
+                "comisiones": commissions,
+                "ingreso_neto": round(sales - commissions, 2),
+            })
 
         data_by_month = {
             int(row["mes"]): {
@@ -138,6 +186,7 @@ class ReportService:
                 2,
             ),
             "mensual": monthly,
+            "formas_pago": payments,
         }
 
     def export_annual_financial_report(
@@ -158,6 +207,7 @@ class ReportService:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Reporte anual"
+        payments_sheet = workbook.create_sheet("Formas de pago")
 
         title_fill = PatternFill("solid", fgColor="1F4E78")
         header_fill = PatternFill("solid", fgColor="D9EAF7")
@@ -249,6 +299,28 @@ class ReportService:
         widths = (16, 15, 15, 15, 17, 15)
         for column, width in enumerate(widths, start=1):
             sheet.column_dimensions[get_column_letter(column)].width = width
+
+        payment_headers = (
+            "Forma de pago", "Ventas", "Comisiones", "Ingreso neto"
+        )
+        for column, header in enumerate(payment_headers, start=1):
+            cell = payments_sheet.cell(row=1, column=column, value=header)
+            cell.fill = title_fill
+            cell.font = Font(color="FFFFFF", bold=True)
+            cell.alignment = Alignment(horizontal="center")
+        for row_number, payment in enumerate(report["formas_pago"], start=2):
+            values = (
+                payment["metodo_pago"], payment["ventas"],
+                payment["comisiones"], payment["ingreso_neto"],
+            )
+            for column, value in enumerate(values, start=1):
+                cell = payments_sheet.cell(row=row_number, column=column, value=value)
+                if column > 1:
+                    cell.number_format = money_format
+        payments_sheet.freeze_panes = "A2"
+        payments_sheet.auto_filter.ref = "A1:D4"
+        for column, width in enumerate((22, 16, 16, 17), start=1):
+            payments_sheet.column_dimensions[get_column_letter(column)].width = width
 
         workbook.save(output_path)
         return output_path
