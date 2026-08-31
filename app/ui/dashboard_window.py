@@ -32,7 +32,7 @@ class StatCard(QFrame):
         super().__init__(parent)
 
         self.setObjectName("statCard")
-        self.setMinimumHeight(120)
+        self.setMinimumHeight(170)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 14, 18, 14)
@@ -46,6 +46,7 @@ class StatCard(QFrame):
 
         self.subtitle_label = QLabel(subtitle)
         self.subtitle_label.setObjectName("cardSubtitle")
+        self.subtitle_label.setWordWrap(True)
 
         layout.addWidget(self.title_label)
         layout.addWidget(self.value_label)
@@ -461,8 +462,9 @@ class DashboardWindow(QWidget):
                 }
 
             QLabel#cardSubtitle {
-                font-size: 11px;
-                color: #777777;
+                font-size: 22px;
+                font-weight: 600;
+                color: #1F4E78;
                 }
 
             QFrame#chartsPlaceholder {
