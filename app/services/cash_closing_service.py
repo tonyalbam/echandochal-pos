@@ -23,6 +23,14 @@ class CashClosingService:
     """Calcula y exporta el corte diario de ventas."""
 
     PAYMENT_METHODS = ("Efectivo", "Transferencia", "Mercado Libre")
+    DENOMINATIONS = (
+        ("Billete", 1000.0), ("Billete", 500.0),
+        ("Billete", 200.0), ("Billete", 100.0),
+        ("Billete", 50.0), ("Billete", 20.0),
+        ("Moneda", 20.0), ("Moneda", 10.0),
+        ("Moneda", 5.0), ("Moneda", 2.0),
+        ("Moneda", 1.0), ("Moneda", 0.5),
+    )
 
     def __init__(self, database: Database) -> None:
         self.database = database
@@ -56,15 +64,41 @@ class CashClosingService:
         cursor.execute(
             """
             SELECT
-                metodo_pago,
-                COUNT(*) AS tickets,
-                COALESCE(SUM(total), 0) AS ventas,
-                COALESCE(SUM(monto_comision), 0) AS comisiones,
-                COALESCE(SUM(total_neto), 0) AS dinero_neto
-            FROM ventas
-            WHERE cancelada = 0
-              AND fecha = ?
-            GROUP BY metodo_pago
+                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
+                COUNT(DISTINCT v.id) AS tickets,
+                COALESCE(SUM(
+                    CASE
+                        WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
+                        THEN v.total * dv.subtotal / v.subtotal
+                        ELSE dv.subtotal - dv.descuento
+                    END
+                ), 0) AS ventas,
+                COALESCE(SUM(
+                    COALESCE(
+                        dv.monto_comision,
+                        CASE WHEN v.subtotal > 0
+                            THEN v.monto_comision * dv.subtotal / v.subtotal
+                            ELSE 0 END
+                    )
+                ), 0) AS comisiones,
+                COALESCE(SUM(
+                    COALESCE(
+                        dv.total_neto,
+                        CASE
+                            WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
+                            THEN v.total * dv.subtotal / v.subtotal
+                            ELSE dv.subtotal - dv.descuento
+                        END
+                        - CASE WHEN v.subtotal > 0
+                            THEN v.monto_comision * dv.subtotal / v.subtotal
+                            ELSE 0 END
+                    )
+                ), 0) AS dinero_neto
+            FROM detalle_venta dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            WHERE v.cancelada = 0
+              AND v.fecha = ?
+            GROUP BY COALESCE(dv.metodo_pago, v.metodo_pago)
             """,
             (closing_date,),
         )
@@ -120,12 +154,53 @@ class CashClosingService:
             "utilidad": round(sales - commissions - cost, 2),
         }
 
+    def calculate_cash_reconciliation(
+        self,
+        closing_date: str,
+        counts: dict[tuple[str, float], int] | None = None,
+    ) -> dict:
+        """Compara el efectivo contado contra las ventas en efectivo."""
+
+        counts = counts or {}
+        rows = []
+        total_counted = 0.0
+        for kind, denomination in self.DENOMINATIONS:
+            quantity = max(0, int(counts.get((kind, denomination), 0)))
+            amount = round(denomination * quantity, 2)
+            total_counted += amount
+            rows.append({
+                "tipo": kind,
+                "denominacion": denomination,
+                "cantidad": quantity,
+                "importe": amount,
+            })
+
+        closing = self.get_daily_closing(closing_date)
+        expected = next(
+            payment["ventas"]
+            for payment in closing["formas_pago"]
+            if payment["metodo_pago"] == "Efectivo"
+        )
+        difference = round(total_counted - expected, 2)
+        return {
+            "fecha": closing_date,
+            "denominaciones": rows,
+            "efectivo_esperado": round(expected, 2),
+            "efectivo_contado": round(total_counted, 2),
+            "diferencia": difference,
+            "estado": "CUADRA" if difference == 0 else (
+                "SOBRANTE" if difference > 0 else "FALTANTE"
+            ),
+        }
+
     def export_excel(
         self,
         closing_date: str,
         destination: str | Path,
+        cash_counts: dict[tuple[str, float], int] | None = None,
     ) -> Path:
         data = self.get_daily_closing(closing_date)
+        cash = self.calculate_cash_reconciliation(closing_date, cash_counts)
         output_path = Path(destination)
         if output_path.suffix.lower() != ".xlsx":
             output_path = output_path.with_suffix(".xlsx")
@@ -184,6 +259,40 @@ class CashClosingService:
             value_cell.font = bold
             value_cell.number_format = number_format
 
+        cash_start = 17
+        sheet.merge_cells(
+            start_row=cash_start, start_column=1,
+            end_row=cash_start, end_column=4,
+        )
+        sheet.cell(cash_start, 1, "Arqueo manual de efectivo")
+        sheet.cell(cash_start, 1).fill = dark_fill
+        sheet.cell(cash_start, 1).font = white_bold
+        cash_headers = ("Tipo", "Denominación", "Cantidad", "Importe")
+        for column, header in enumerate(cash_headers, start=1):
+            cell = sheet.cell(cash_start + 1, column, header)
+            cell.fill = light_fill
+            cell.font = bold
+        row_number = cash_start + 2
+        for denomination in cash["denominaciones"]:
+            values = (
+                denomination["tipo"], denomination["denominacion"],
+                denomination["cantidad"], denomination["importe"],
+            )
+            for column, value in enumerate(values, start=1):
+                sheet.cell(row_number, column, value)
+            sheet.cell(row_number, 2).number_format = money
+            sheet.cell(row_number, 4).number_format = money
+            row_number += 1
+        for label, value, format_code in (
+            ("Efectivo esperado", cash["efectivo_esperado"], money),
+            ("Efectivo contado", cash["efectivo_contado"], money),
+            ("Diferencia", cash["diferencia"], money),
+            ("Estado", cash["estado"], "@"),
+        ):
+            sheet.cell(row_number, 1, label).font = bold
+            sheet.cell(row_number, 2, value).number_format = format_code
+            row_number += 1
+
         widths = (28, 18, 18, 18, 18)
         for column, width in enumerate(widths, start=1):
             sheet.column_dimensions[chr(64 + column)].width = width
@@ -195,8 +304,10 @@ class CashClosingService:
         self,
         closing_date: str,
         destination: str | Path,
+        cash_counts: dict[tuple[str, float], int] | None = None,
     ) -> Path:
         data = self.get_daily_closing(closing_date)
+        cash = self.calculate_cash_reconciliation(closing_date, cash_counts)
         output_path = Path(destination)
         if output_path.suffix.lower() != ".pdf":
             output_path = output_path.with_suffix(".pdf")
@@ -207,7 +318,7 @@ class CashClosingService:
         story = []
         logo_path = Path(__file__).resolve().parents[1] / "assets" / "logo_ticket.png"
         if logo_path.is_file():
-            logo = Image(str(logo_path), width=55 * mm, height=36.67 * mm)
+            logo = Image(str(logo_path), width=45 * mm, height=30 * mm)
             logo.hAlign = "CENTER"
             story.extend([logo, Spacer(1, 4 * mm)])
 
@@ -234,10 +345,10 @@ class CashClosingService:
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-            ("TOPPADDING", (0, 0), (-1, 0), 8),
+            ("TOPPADDING", (0, 0), (-1, 0), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
         ]))
-        story.extend([payment_table, Spacer(1, 7 * mm)])
+        story.extend([payment_table, Spacer(1, 4 * mm)])
 
         summary_data = [
             ["TOTAL VENTAS", f"${data['total_ventas']:,.2f}"],
@@ -253,14 +364,51 @@ class CashClosingService:
             ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
             ("ALIGN", (1, 0), (1, -1), "RIGHT"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("PADDING", (0, 0), (-1, -1), 7),
+            ("PADDING", (0, 0), (-1, -1), 4),
         ]))
         story.append(summary_table)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("<b>Arqueo manual de efectivo</b>", styles["Heading2"]))
+        cash_data = [["Tipo", "Denominación", "Cantidad", "Importe"]]
+        for denomination in cash["denominaciones"]:
+            cash_data.append([
+                denomination["tipo"],
+                f"${denomination['denominacion']:,.2f}",
+                str(denomination["cantidad"]),
+                f"${denomination['importe']:,.2f}",
+            ])
+        cash_table = Table(cash_data, repeatRows=1)
+        cash_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.extend([cash_table, Spacer(1, 4 * mm)])
+        reconciliation = Table([
+            ["Efectivo esperado", f"${cash['efectivo_esperado']:,.2f}"],
+            ["Efectivo contado", f"${cash['efectivo_contado']:,.2f}"],
+            ["Diferencia", f"${cash['diferencia']:,.2f}"],
+            ["Estado", cash["estado"]],
+        ], colWidths=[70 * mm, 45 * mm])
+        reconciliation.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#D9EAF7")),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(reconciliation)
 
         document = SimpleDocTemplate(
             str(output_path), pagesize=letter,
             rightMargin=18 * mm, leftMargin=18 * mm,
-            topMargin=15 * mm, bottomMargin=15 * mm,
+            topMargin=8 * mm, bottomMargin=8 * mm,
             title=f"Corte diario {closing_date}",
         )
         document.build(story)
