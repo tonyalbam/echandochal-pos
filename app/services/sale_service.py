@@ -30,6 +30,7 @@ class SaleService:
                 p.id,
                 p.codigo,
                 p.codigo_barras,
+                p.codigo_qr,
                 p.nombre,
                 p.unidad,
                 p.precio,
@@ -45,10 +46,11 @@ class SaleService:
               AND (
                   p.codigo = ?
                   OR p.codigo_barras = ?
+                  OR p.codigo_qr = ?
               )
             LIMIT 1
             """,
-            (code, code),
+            (code, code, code),
         )
 
         row = cursor.fetchone()
@@ -66,7 +68,7 @@ class SaleService:
         cursor.execute(
             """
             SELECT
-                p.id, p.codigo, p.codigo_barras, p.nombre,
+                p.id, p.codigo, p.codigo_barras, p.codigo_qr, p.nombre,
                 p.precio, p.existencia, p.stock_minimo,
                 COALESCE(p.marca, '') AS marca,
                 COALESCE(p.color, '') AS color,
@@ -77,12 +79,14 @@ class SaleService:
               AND (
                   p.codigo LIKE ?
                   OR COALESCE(p.codigo_barras, '') LIKE ?
+                  OR COALESCE(p.codigo_qr, '') LIKE ?
                   OR p.nombre LIKE ?
                   OR COALESCE(p.marca, '') LIKE ?
               )
             ORDER BY
                 CASE
-                    WHEN p.codigo = ? OR p.codigo_barras = ? THEN 0
+                    WHEN p.codigo = ? OR p.codigo_barras = ?
+                         OR p.codigo_qr = ? THEN 0
                     WHEN p.nombre LIKE ? THEN 1
                     ELSE 2
                 END,
@@ -90,8 +94,8 @@ class SaleService:
             LIMIT ?
             """,
             (
-                pattern, pattern, pattern, pattern,
-                query, query, f"{query}%", int(limit),
+                pattern, pattern, pattern, pattern, pattern,
+                query, query, query, f"{query}%", int(limit),
             ),
         )
         return [dict(row) for row in cursor.fetchall()]
