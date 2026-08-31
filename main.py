@@ -10,6 +10,15 @@ from app.ui.main_window import MainWindow
 
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setStyleSheet(
+        """
+        QTableView {
+            qproperty-alternatingRowColors: true;
+            alternate-background-color: #F2F7FB;
+            background-color: #FFFFFF;
+        }
+        """
+    )
 
     database = Database()
     create_database(database)
