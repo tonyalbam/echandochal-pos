@@ -60,7 +60,7 @@ class TicketService:
             for item in sale["items"]
         ]
         items_height = sum(
-            31 + (len(lines) * 10)
+            41 + (len(lines) * 10)
             for _, lines in wrapped_items
         )
 
@@ -222,6 +222,11 @@ class TicketService:
                 self.WIDTH - self.MARGIN,
                 y,
                 f"${subtotal:,.2f}",
+            )
+            y -= 10
+            document.setFont("Helvetica", 7)
+            document.drawString(
+                self.MARGIN, y, f"Pago: {item['metodo_pago']}"
             )
             y -= 16
 
