@@ -1,5 +1,6 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QStringListModel, Qt
 from PySide6.QtWidgets import (
+    QCompleter,
     QComboBox,
     QDoubleSpinBox,
     QFrame,
@@ -32,6 +33,7 @@ class SaleWindow(QWidget):
         self.ticket_service = TicketService(database)
         self.items: list[dict] = []
         self.last_sale_id: int | None = None
+        self.suggestion_products: dict[str, dict] = {}
 
         self._crear_interfaz()
         self._actualizar_totales()
@@ -51,8 +53,8 @@ class SaleWindow(QWidget):
         layout.addWidget(titulo)
 
         ayuda = QLabel(
-            "Escanea el código de barras o escribe el código "
-            "del producto y presiona Enter."
+            "Escanea el código de barras o busca por código, nombre o marca; "
+            "selecciona una coincidencia para agregarla."
         )
         ayuda.setStyleSheet("color: #666;")
         layout.addWidget(ayuda)
@@ -61,12 +63,22 @@ class SaleWindow(QWidget):
 
         self.codigo_input = QLineEdit()
         self.codigo_input.setPlaceholderText(
-            "Código / código de barras"
+            "Código, código de barras, nombre o marca"
         )
         self.codigo_input.setMinimumHeight(38)
         self.codigo_input.returnPressed.connect(
             self._agregar_por_codigo
         )
+        self.suggestion_model = QStringListModel(self)
+        self.completer = QCompleter(self.suggestion_model, self)
+        self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.completer.setCompletionMode(
+            QCompleter.CompletionMode.UnfilteredPopupCompletion
+        )
+        self.completer.setMaxVisibleItems(12)
+        self.completer.activated.connect(self._agregar_sugerencia)
+        self.codigo_input.setCompleter(self.completer)
+        self.codigo_input.textEdited.connect(self._actualizar_sugerencias)
 
         boton_agregar = QPushButton("Agregar")
         boton_agregar.setMinimumHeight(38)
@@ -84,12 +96,15 @@ class SaleWindow(QWidget):
 
         layout.addLayout(entrada_layout)
 
-        self.tabla = QTableWidget(0, 7)
+        self.tabla = QTableWidget(0, 10)
 
         self.tabla.setHorizontalHeaderLabels(
             [
                 "Código",
                 "Producto",
+                "Marca",
+                "Color",
+                "Categoría",
                 "Cantidad",
                 "Precio",
                 "Importe",
@@ -114,7 +129,7 @@ class SaleWindow(QWidget):
         )
 
         self.tabla.horizontalHeader().setSectionResizeMode(
-            6,
+            9,
             QHeaderView.ResizeMode.ResizeToContents,
         )
 
@@ -246,9 +261,10 @@ class SaleWindow(QWidget):
         if not codigo:
             return
 
-        producto = self.service.find_product(
-            codigo
-        )
+        producto = self.service.find_product(codigo)
+        if not producto:
+            matches = self.service.search_products(codigo)
+            producto = matches[0] if matches else None
 
         if not producto:
             QMessageBox.warning(
@@ -266,6 +282,27 @@ class SaleWindow(QWidget):
 
             return
 
+        self._agregar_producto(producto)
+
+    def _actualizar_sugerencias(self, text: str) -> None:
+        products = self.service.search_products(text)
+        self.suggestion_products = {}
+        labels = []
+        for product in products:
+            brand = f" | {product['marca']}" if product["marca"] else ""
+            label = f"{product['codigo']} | {product['nombre']}{brand}"
+            labels.append(label)
+            self.suggestion_products[label] = product
+        self.suggestion_model.setStringList(labels)
+        if labels:
+            self.completer.complete()
+
+    def _agregar_sugerencia(self, label: str) -> None:
+        product = self.suggestion_products.get(label)
+        if product:
+            self._agregar_producto(product)
+
+    def _agregar_producto(self, producto: dict) -> None:
         for item in self.items:
 
             if item["producto_id"] == producto["id"]:
@@ -307,6 +344,9 @@ class SaleWindow(QWidget):
                 "producto_id": producto["id"],
                 "codigo": producto["codigo"],
                 "nombre": producto["nombre"],
+                "marca": producto["marca"],
+                "color": producto["color"],
+                "categoria": producto["categoria"],
                 "cantidad": 1.0,
                 "precio_unitario": float(
                     producto["precio"]
@@ -350,6 +390,24 @@ class SaleWindow(QWidget):
             self.tabla.setItem(
                 row,
                 2,
+                QTableWidgetItem(item["marca"]),
+            )
+
+            self.tabla.setItem(
+                row,
+                3,
+                QTableWidgetItem(item["color"]),
+            )
+
+            self.tabla.setItem(
+                row,
+                4,
+                QTableWidgetItem(item["categoria"]),
+            )
+
+            self.tabla.setItem(
+                row,
+                5,
                 QTableWidgetItem(
                     f"{item['cantidad']:g}"
                 ),
@@ -357,7 +415,7 @@ class SaleWindow(QWidget):
 
             self.tabla.setItem(
                 row,
-                3,
+                6,
                 QTableWidgetItem(
                     f"$ {item['precio_unitario']:,.2f}"
                 ),
@@ -370,7 +428,7 @@ class SaleWindow(QWidget):
 
             self.tabla.setItem(
                 row,
-                4,
+                7,
                 QTableWidgetItem(
                     f"$ {importe:,.2f}"
                 ),
@@ -383,7 +441,7 @@ class SaleWindow(QWidget):
                 lambda method, index=row:
                 self._cambiar_metodo_pago(index, method)
             )
-            self.tabla.setCellWidget(row, 5, payment)
+            self.tabla.setCellWidget(row, 8, payment)
 
             quitar = QPushButton("Quitar")
 
@@ -394,7 +452,7 @@ class SaleWindow(QWidget):
 
             self.tabla.setCellWidget(
                 row,
-                6,
+                9,
                 quitar,
             )
 
