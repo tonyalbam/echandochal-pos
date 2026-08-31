@@ -73,7 +73,7 @@ class SaleDetailDialog(QDialog):
 
         tabla = QTableWidget(
             len(sale["items"]),
-            5,
+            7,
         )
 
         tabla.setHorizontalHeaderLabels(
@@ -83,6 +83,8 @@ class SaleDetailDialog(QDialog):
                 "Cantidad",
                 "Precio",
                 "Importe",
+                "Forma de pago",
+                "Comisión",
             ]
         )
 
@@ -136,6 +138,14 @@ class SaleDetailDialog(QDialog):
                 QTableWidgetItem(
                     f"$ {item['subtotal']:,.2f}"
                 ),
+            )
+
+            tabla.setItem(
+                row, 5, QTableWidgetItem(item["metodo_pago"])
+            )
+            tabla.setItem(
+                row, 6,
+                QTableWidgetItem(f"$ {item['monto_comision']:,.2f}"),
             )
 
         layout.addWidget(tabla)
