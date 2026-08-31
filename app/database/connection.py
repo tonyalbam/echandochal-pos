@@ -1,12 +1,16 @@
 from pathlib import Path
 import sqlite3
+import sys
 
 
 class Database:
     """Gestiona la conexión SQLite de Echando Chal POS."""
 
     def __init__(self) -> None:
-        self.app_root = Path(__file__).resolve().parents[2]
+        if getattr(sys, "frozen", False):
+            self.app_root = Path(sys.executable).resolve().parent
+        else:
+            self.app_root = Path(__file__).resolve().parents[2]
 
         self.data_directory = self.app_root / "data"
         self.data_directory.mkdir(parents=True, exist_ok=True)
