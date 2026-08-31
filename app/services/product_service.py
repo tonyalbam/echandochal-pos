@@ -12,6 +12,11 @@ from app.services.configuration_service import ConfigurationService
 class ProductService:
     """Operaciones de negocio relacionadas con productos."""
 
+    ALLOWED_CATEGORIES = (
+        "Algodón", "Acrílico", "Combinado", "Clases", "Mercería",
+        "Pedidos personalizados", "Talleres", "Patrones",
+    )
+
     def __init__(self, database: Database) -> None:
         self.database = database
 
@@ -218,8 +223,19 @@ class ProductService:
             SELECT id, nombre
             FROM categorias
             WHERE activo = 1
-            ORDER BY nombre COLLATE NOCASE
-            """
+              AND nombre IN (?, ?, ?, ?, ?, ?, ?, ?)
+            ORDER BY CASE nombre
+                WHEN 'Algodón' THEN 1
+                WHEN 'Acrílico' THEN 2
+                WHEN 'Combinado' THEN 3
+                WHEN 'Clases' THEN 4
+                WHEN 'Mercería' THEN 5
+                WHEN 'Pedidos personalizados' THEN 6
+                WHEN 'Talleres' THEN 7
+                WHEN 'Patrones' THEN 8
+            END
+            """,
+            self.ALLOWED_CATEGORIES,
         )
 
         return [dict(row) for row in cursor.fetchall()]
