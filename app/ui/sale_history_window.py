@@ -310,7 +310,7 @@ class SaleHistoryWindow(QWidget):
         self.tabla = QTreeWidget()
         self.tabla.setColumnCount(9)
 
-        self.tabla.setHorizontalHeaderLabels(
+        self.tabla.setHeaderLabels(
             [
                 "Folio",
                 "Fecha",
@@ -449,7 +449,7 @@ class SaleHistoryWindow(QWidget):
                 year_item.flags() & ~Qt.ItemFlag.ItemIsSelectable
             )
             self.tabla.addTopLevelItem(year_item)
-            self.tabla.setFirstItemColumnSpanned(year_item, True)
+            year_item.setFirstColumnSpanned(True)
 
             for month_group in year_group["months"]:
                 month_item = QTreeWidgetItem([
@@ -459,7 +459,7 @@ class SaleHistoryWindow(QWidget):
                     month_item.flags() & ~Qt.ItemFlag.ItemIsSelectable
                 )
                 year_item.addChild(month_item)
-                self.tabla.setFirstItemColumnSpanned(month_item, True)
+                month_item.setFirstColumnSpanned(True)
                 for sale in month_group["sales"]:
                     month_item.addChild(self._sale_item(sale))
 
