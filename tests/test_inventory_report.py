@@ -94,6 +94,27 @@ class InventoryReportTest(unittest.TestCase):
 
         self.assertEqual([product["codigo"] for product in products], ["P-4"])
 
+    def test_inactive_product_status_is_deactivated(self) -> None:
+        inactive = self.service.list_products(
+            "inactivo", include_inactive=True
+        )[0]
+
+        self.assertEqual(
+            self.service.product_status(inactive),
+            "DESACTIVADO",
+        )
+
+    def test_low_stock_grid_data_excludes_inactive_products(self) -> None:
+        products = self.service.list_low_stock_products()
+
+        self.assertEqual(
+            [product["codigo"] for product in products],
+            ["P-3", "P-2"],
+        )
+        self.assertEqual(products[0]["faltante_minimo"], 4)
+        self.assertEqual(products[1]["faltante_minimo"], 3)
+        self.assertNotIn("P-4", [product["codigo"] for product in products])
+
     def test_export_inventory_report_contains_auditable_formulas(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = self.service.export_inventory_report(

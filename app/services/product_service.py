@@ -101,6 +101,30 @@ class ProductService:
 
         return [dict(row) for row in cursor.fetchall()]
 
+    def list_low_stock_products(self, search: str = "") -> list[dict]:
+        """Devuelve productos activos agotados o en su mínimo de existencia."""
+        products = self.list_products(search)
+        low_stock = []
+        for product in products:
+            existence = float(product["existencia"])
+            minimum = float(product["stock_minimo"])
+            if existence <= minimum:
+                low_stock.append({
+                    **product,
+                    "faltante_minimo": round(max(minimum - existence, 0), 3),
+                })
+        return low_stock
+
+    @staticmethod
+    def product_status(product: dict) -> str:
+        if not product["activo"]:
+            return "DESACTIVADO"
+        if product["existencia"] <= 0:
+            return "AGOTADO"
+        if product["existencia"] <= product["stock_minimo"]:
+            return "BAJO"
+        return "OK"
+
     def get_product(self, product_id: int) -> Optional[dict]:
         cursor = self.database.cursor()
 

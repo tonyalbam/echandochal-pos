@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -120,7 +121,37 @@ class ProductsWindow(QWidget):
 
         self.table.horizontalHeader().setStretchLastSection(True)
 
-        layout.addWidget(self.table)
+        self.low_stock_table = QTableWidget()
+        self.low_stock_table.setColumnCount(9)
+        self.low_stock_table.setHorizontalHeaderLabels(
+            [
+                "Código",
+                "Producto",
+                "Marca",
+                "Color",
+                "Categoría",
+                "Existencia",
+                "Stock mínimo",
+                "Faltante al mínimo",
+                "Proveedor",
+            ]
+        )
+        self.low_stock_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.low_stock_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.low_stock_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.low_stock_table.doubleClicked.connect(self._edit_selected)
+        self.low_stock_table.horizontalHeader().setStretchLastSection(True)
+
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.table, "Todos los productos")
+        self.tabs.addTab(self.low_stock_table, "Stock bajo / agotado")
+        layout.addWidget(self.tabs)
 
         buttons = QHBoxLayout()
 
@@ -187,24 +218,56 @@ class ProductsWindow(QWidget):
             )
 
         self.table.resizeColumnsToContents()
+        self._load_low_stock_products()
+
+    def _load_low_stock_products(self) -> None:
+        products = self.service.list_low_stock_products(self.search.text())
+        self.low_stock_table.setRowCount(0)
+
+        for row, product in enumerate(products):
+            self.low_stock_table.insertRow(row)
+            values = [
+                product["codigo"],
+                product["nombre"],
+                product["marca"],
+                product["color"],
+                product["categoria"],
+                f'{product["existencia"]:,.3f}',
+                f'{product["stock_minimo"]:,.3f}',
+                f'{product["faltante_minimo"]:,.3f}',
+                product["proveedor"],
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column in (5, 6, 7):
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight
+                        | Qt.AlignmentFlag.AlignVCenter
+                    )
+                self.low_stock_table.setItem(row, column, item)
+            self.low_stock_table.item(row, 0).setData(
+                Qt.ItemDataRole.UserRole,
+                product["id"],
+            )
+
+        self.low_stock_table.resizeColumnsToContents()
 
     @staticmethod
     def _stock_status(product: dict) -> str:
-        if product["existencia"] <= 0:
-            return "AGOTADO"
-
-        if product["existencia"] <= product["stock_minimo"]:
-            return "BAJO"
-
-        return "OK"
+        return ProductService.product_status(product)
 
     def _selected_product_id(self):
-        row = self.table.currentRow()
+        table = (
+            self.low_stock_table
+            if self.tabs.currentWidget() is self.low_stock_table
+            else self.table
+        )
+        row = table.currentRow()
 
         if row < 0:
             return None
 
-        item = self.table.item(row, 0)
+        item = table.item(row, 0)
 
         if item is None:
             return None
