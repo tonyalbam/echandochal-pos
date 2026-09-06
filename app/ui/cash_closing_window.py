@@ -20,6 +20,14 @@ from app.database.connection import Database
 from app.services.cash_closing_service import CashClosingService
 
 
+class ClearOnFocusDoubleSpinBox(QDoubleSpinBox):
+    """Reinicia el importe al volver a entrar al campo."""
+
+    def focusInEvent(self, event) -> None:
+        self.setValue(0)
+        super().focusInEvent(event)
+
+
 class CashClosingWindow(QWidget):
     """Resumen y exportación del corte diario."""
 
@@ -115,7 +123,7 @@ class CashClosingWindow(QWidget):
             self.cash_amounts[key] = amount
 
         cash_layout.addWidget(QLabel("Morralla"), 1, 5)
-        self.loose_change = QDoubleSpinBox()
+        self.loose_change = ClearOnFocusDoubleSpinBox()
         self.loose_change.setRange(0, 999999.99)
         self.loose_change.setDecimals(2)
         self.loose_change.setPrefix("$ ")

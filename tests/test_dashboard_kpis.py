@@ -115,6 +115,13 @@ class DashboardKpiTest(unittest.TestCase):
         self.assertEqual(top_product["nombre"], "Producto líder")
         self.assertEqual(top_product["cantidad"], 3.0)
 
+        ranking = self.service.get_top_selling_products_for_period("2026-08")
+        self.assertEqual(
+            [product["nombre"] for product in ranking],
+            ["Producto líder", "Producto secundario"],
+        )
+        self.assertEqual([product["cantidad"] for product in ranking], [3.0, 1.0])
+
     def test_profit_margin_uses_historical_cost_and_commission(self) -> None:
         self.assertEqual(
             self.service.get_profit_for_period("2026-08"),
@@ -136,6 +143,9 @@ class DashboardKpiTest(unittest.TestCase):
         )
         self.assertIsNone(
             self.service.get_top_selling_product_for_period("2025-01")
+        )
+        self.assertEqual(
+            self.service.get_top_selling_products_for_period("2025-01"), []
         )
 
 

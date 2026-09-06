@@ -360,6 +360,20 @@ class DashboardWindow(QWidget):
             subtitle="Sin unidades vendidas este mes",
         )
 
+        self.cards["productos_mas_vendidos_mes"] = StatCard(
+            "Top 5 productos del mes",
+            value="Sin ventas",
+            subtitle="No hay productos vendidos este mes",
+        )
+        self.cards["productos_mas_vendidos_mes"].setMinimumHeight(360)
+
+        self.cards["productos_mas_vendidos_anio"] = StatCard(
+            "Top 5 productos del año",
+            value="Sin ventas",
+            subtitle="No hay productos vendidos este año",
+        )
+        self.cards["productos_mas_vendidos_anio"].setMinimumHeight(360)
+
         kpi_grid.addWidget(
             self.cards["margen_utilidad_mes"], 0, 0
         )
@@ -368,6 +382,12 @@ class DashboardWindow(QWidget):
         )
         kpi_grid.addWidget(
             self.cards["producto_mas_vendido"], 0, 2
+        )
+        kpi_grid.addWidget(
+            self.cards["productos_mas_vendidos_mes"], 1, 0, 1, 2
+        )
+        kpi_grid.addWidget(
+            self.cards["productos_mas_vendidos_anio"], 1, 2, 1, 2
         )
 
         kpi_layout.addLayout(kpi_grid)
@@ -546,6 +566,17 @@ class DashboardWindow(QWidget):
             )
         )
 
+        self._set_product_ranking(
+            "productos_mas_vendidos_mes",
+            summary["productos_mas_vendidos_mes"],
+            "mes",
+        )
+        self._set_product_ranking(
+            "productos_mas_vendidos_anio",
+            summary["productos_mas_vendidos_anio"],
+            "año",
+        )
+
         ventas_mes = summary["ventas_mes"]
         comisiones_mes = summary["comisiones_mes"]
 
@@ -576,6 +607,23 @@ class DashboardWindow(QWidget):
             annual_data,
             year,
         )
+
+    def _set_product_ranking(
+        self, card_key: str, products: list[dict], period_label: str
+    ) -> None:
+        card = self.cards[card_key]
+        if not products:
+            card.set_value("Sin ventas")
+            card.set_subtitle(
+                f"No hay productos vendidos este {period_label}"
+            )
+            return
+
+        card.set_value(f"{len(products)} productos")
+        card.set_subtitle("\n".join(
+            f"{position}. {product['nombre']} — {product['cantidad']:g} unidades"
+            for position, product in enumerate(products, start=1)
+        ))
 
     def export_annual_report(self) -> None:
         """Solicita una ruta y exporta el reporte del año actual."""

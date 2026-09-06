@@ -19,7 +19,9 @@ class DashboardService:
         mes = hoy[:7]
         anio = hoy[:4]
 
-        top_product = self.get_top_selling_product_for_period(mes)
+        top_products_month = self.get_top_selling_products_for_period(mes)
+        top_products_year = self.get_top_selling_products_for_period(anio)
+        top_product = top_products_month[0] if top_products_month else None
         payment_sales = self.get_payment_sales_for_period(mes)
 
         return {
@@ -50,6 +52,8 @@ class DashboardService:
             "producto_mas_vendido_unidades": (
                 top_product["cantidad"] if top_product else 0.0
             ),
+            "productos_mas_vendidos_mes": top_products_month,
+            "productos_mas_vendidos_anio": top_products_year,
         }
 
     def get_payment_sales_for_period(self, period: str) -> dict[str, float]:
@@ -278,6 +282,17 @@ class DashboardService:
     ) -> dict | None:
         """Obtiene el producto con más unidades vendidas."""
 
+        products = self.get_top_selling_products_for_period(period, limit=1)
+        return products[0] if products else None
+
+    def get_top_selling_products_for_period(
+        self,
+        period: str,
+        limit: int = 5,
+    ) -> list[dict]:
+        """Obtiene hasta cinco productos ordenados por unidades vendidas."""
+
+        limit = max(1, min(int(limit), 100))
         cursor = self.database.cursor()
         cursor.execute(
             """
@@ -299,22 +314,21 @@ class DashboardService:
                 cantidad DESC,
                 importe DESC,
                 p.nombre
-            LIMIT 1
+            LIMIT ?
             """,
-            (f"{period}%",),
+            (f"{period}%", limit),
         )
 
-        row = cursor.fetchone()
-        if row is None:
-            return None
-
-        return {
-            "id": int(row["id"]),
-            "codigo": row["codigo"],
-            "nombre": row["nombre"],
-            "cantidad": round(float(row["cantidad"]), 2),
-            "importe": round(float(row["importe"]), 2),
-        }
+        return [
+            {
+                "id": int(row["id"]),
+                "codigo": row["codigo"],
+                "nombre": row["nombre"],
+                "cantidad": round(float(row["cantidad"]), 2),
+                "importe": round(float(row["importe"]), 2),
+            }
+            for row in cursor.fetchall()
+        ]
 
     def get_monthly_financial_summary(
         self,
