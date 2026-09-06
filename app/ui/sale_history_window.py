@@ -344,7 +344,7 @@ class SaleHistoryWindow(QWidget):
             self._actualizar_botones
         )
 
-        header = self.tabla.horizontalHeader()
+        header = self.tabla.header()
 
         header.setSectionResizeMode(
             0,

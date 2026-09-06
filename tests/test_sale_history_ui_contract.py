@@ -13,6 +13,8 @@ class SaleHistoryUiContractTest(unittest.TestCase):
 
         self.assertIn("self.tabla.setHeaderLabels(", source)
         self.assertNotIn("self.tabla.setHorizontalHeaderLabels(", source)
+        self.assertIn("header = self.tabla.header()", source)
+        self.assertNotIn("self.tabla.horizontalHeader()", source)
         self.assertNotIn("self.tabla.setFirstItemColumnSpanned(", source)
         self.assertIn("year_item.setFirstColumnSpanned(True)", source)
         self.assertIn("month_item.setFirstColumnSpanned(True)", source)
