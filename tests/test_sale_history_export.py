@@ -97,6 +97,22 @@ class SaleHistoryExportTest(unittest.TestCase):
         self.assertEqual(len(sales), 1)
         self.assertEqual(sales[0]["folio"], "V-20260830-0001")
 
+    def test_sales_can_be_grouped_by_year_and_month(self) -> None:
+        sales = [
+            {"id": 3, "fecha": "2026-09-15"},
+            {"id": 2, "fecha": "2026-09-01"},
+            {"id": 1, "fecha": "2025-12-20"},
+        ]
+
+        groups = self.service.group_sales_by_year_month(sales)
+
+        self.assertEqual([group["year"] for group in groups], ["2026", "2025"])
+        self.assertEqual(groups[0]["months"][0]["label"], "Septiembre")
+        self.assertEqual(
+            [sale["id"] for sale in groups[0]["months"][0]["sales"]],
+            [3, 2],
+        )
+
     def test_export_sales_report_respects_filters(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = self.service.export_sales_report(

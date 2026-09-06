@@ -12,6 +12,12 @@ from app.services.configuration_service import ConfigurationService
 class SaleHistoryService:
     """Consulta el historial, detalle y cancelación de ventas."""
 
+    MONTH_NAMES = (
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre",
+        "Diciembre",
+    )
+
     def __init__(self, database: Database) -> None:
         self.database = database
 
@@ -87,6 +93,30 @@ class SaleHistoryService:
         return [
             dict(row)
             for row in cursor.fetchall()
+        ]
+
+    @classmethod
+    def group_sales_by_year_month(cls, sales: list[dict]) -> list[dict]:
+        """Agrupa una lista ordenada de ventas conservando su orden."""
+        years: dict[str, dict] = {}
+        for sale in sales:
+            year, month, _ = sale["fecha"].split("-", 2)
+            year_group = years.setdefault(year, {"year": year, "months": {}})
+            month_group = year_group["months"].setdefault(
+                month,
+                {
+                    "month": month,
+                    "label": cls.MONTH_NAMES[int(month) - 1],
+                    "sales": [],
+                },
+            )
+            month_group["sales"].append(sale)
+        return [
+            {
+                "year": group["year"],
+                "months": list(group["months"].values()),
+            }
+            for group in years.values()
         ]
 
     def get_sale(

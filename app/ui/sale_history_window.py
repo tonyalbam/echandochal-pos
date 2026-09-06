@@ -3,6 +3,7 @@ from datetime import datetime
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDateEdit,
     QDialog,
     QFileDialog,
@@ -14,6 +15,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -198,6 +201,7 @@ class SaleHistoryWindow(QWidget):
         self.ticket_service = TicketService(database)
 
         self.sales: list[dict] = []
+        self.sales_by_id: dict[int, dict] = {}
 
         self._crear_interfaz()
         self._load_sales()
@@ -292,15 +296,19 @@ class SaleHistoryWindow(QWidget):
         self.fecha_hasta.setDate(QDate.currentDate())
         self.fecha_hasta.dateChanged.connect(self._load_sales)
         periodo.addWidget(self.fecha_hasta)
+        periodo.addSpacing(20)
+        periodo.addWidget(QLabel("Agrupar por:"))
+        self.agrupar = QComboBox()
+        self.agrupar.addItems(("Sin agrupar", "Año y mes"))
+        self.agrupar.currentTextChanged.connect(self._load_sales)
+        periodo.addWidget(self.agrupar)
         periodo.addStretch()
 
         layout.addLayout(periodo)
         self._actualizar_filtro_fechas()
 
-        self.tabla = QTableWidget(
-            0,
-            9,
-        )
+        self.tabla = QTreeWidget()
+        self.tabla.setColumnCount(9)
 
         self.tabla.setHorizontalHeaderLabels(
             [
@@ -329,7 +337,7 @@ class SaleHistoryWindow(QWidget):
         )
 
         self.tabla.doubleClicked.connect(
-            self._mostrar_detalle
+            self._mostrar_detalle_desde_grid
         )
 
         self.tabla.itemSelectionChanged.connect(
@@ -421,44 +429,58 @@ class SaleHistoryWindow(QWidget):
             date_from=date_from,
             date_to=date_to,
         )
+        self.sales_by_id = {int(sale["id"]): sale for sale in self.sales}
 
-        self.tabla.setRowCount(0)
+        self.tabla.clear()
 
-        for row, sale in enumerate(
-            self.sales
-        ):
-            self.tabla.insertRow(row)
-
-            valores = [
-                sale["folio"],
-                sale["fecha"],
-                sale["hora"],
-                sale["metodo_pago"],
-                f"$ {sale['subtotal']:,.2f}",
-                f"$ {sale['descuento']:,.2f}",
-                f"$ {sale['total']:,.2f}",
-                f"$ {sale['monto_comision']:,.2f}",
-                (
-                    "CANCELADA"
-                    if sale["cancelada"]
-                    else "ACTIVA"
-                ),
-            ]
-
-            for column, value in enumerate(
-                valores
-            ):
-                item = QTableWidgetItem(
-                    str(value)
-                )
-
-                self.tabla.setItem(
-                    row,
-                    column,
-                    item,
-                )
+        if self.agrupar.currentText() == "Año y mes":
+            self._load_grouped_sales()
+        else:
+            for sale in self.sales:
+                self.tabla.addTopLevelItem(self._sale_item(sale))
 
         self._actualizar_botones()
+
+    def _load_grouped_sales(self) -> None:
+        groups = self.service.group_sales_by_year_month(self.sales)
+        for year_group in groups:
+            year_item = QTreeWidgetItem([year_group["year"]])
+            year_item.setFlags(
+                year_item.flags() & ~Qt.ItemFlag.ItemIsSelectable
+            )
+            self.tabla.addTopLevelItem(year_item)
+            self.tabla.setFirstItemColumnSpanned(year_item, True)
+
+            for month_group in year_group["months"]:
+                month_item = QTreeWidgetItem([
+                    f"{month_group['label']} ({len(month_group['sales'])})"
+                ])
+                month_item.setFlags(
+                    month_item.flags() & ~Qt.ItemFlag.ItemIsSelectable
+                )
+                year_item.addChild(month_item)
+                self.tabla.setFirstItemColumnSpanned(month_item, True)
+                for sale in month_group["sales"]:
+                    month_item.addChild(self._sale_item(sale))
+
+        self.tabla.expandAll()
+
+    @staticmethod
+    def _sale_item(sale: dict) -> QTreeWidgetItem:
+        valores = [
+            sale["folio"],
+            sale["fecha"],
+            sale["hora"],
+            sale["metodo_pago"],
+            f"$ {sale['subtotal']:,.2f}",
+            f"$ {sale['descuento']:,.2f}",
+            f"$ {sale['total']:,.2f}",
+            f"$ {sale['monto_comision']:,.2f}",
+            "CANCELADA" if sale["cancelada"] else "ACTIVA",
+        ]
+        item = QTreeWidgetItem([str(value) for value in valores])
+        item.setData(0, Qt.ItemDataRole.UserRole, int(sale["id"]))
+        return item
 
     def _periodo_activo(self) -> tuple[str | None, str | None]:
         if not self.filtrar_fechas.isChecked():
@@ -521,16 +543,12 @@ class SaleHistoryWindow(QWidget):
 
     def _actualizar_botones(self) -> None:
         """Actualiza el estado de los botones según la venta seleccionada."""
-
-        fila = self.tabla.currentRow()
-
-        if fila < 0 or fila >= len(self.sales):
+        sale = self._selected_sale()
+        if sale is None:
             self.detalle.setEnabled(False)
             self.ticket.setEnabled(False)
             self.cancelar.setEnabled(False)
             return
-
-        sale = self.sales[fila]
 
         self.detalle.setEnabled(True)
         self.ticket.setEnabled(True)
@@ -539,10 +557,18 @@ class SaleHistoryWindow(QWidget):
             not bool(sale["cancelada"])
         )
 
-    def _mostrar_detalle(self) -> None:
-        fila = self.tabla.currentRow()
+    def _selected_sale(self) -> dict | None:
+        item = self.tabla.currentItem()
+        if item is None:
+            return None
+        sale_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if sale_id is None:
+            return None
+        return self.sales_by_id.get(int(sale_id))
 
-        if fila < 0:
+    def _mostrar_detalle(self) -> None:
+        sale = self._selected_sale()
+        if sale is None:
             QMessageBox.information(
                 self,
                 "Selecciona una venta",
@@ -550,8 +576,6 @@ class SaleHistoryWindow(QWidget):
             )
 
             return
-
-        sale = self.sales[fila]
 
         detalle = self.service.get_sale(
             sale["id"]
@@ -575,9 +599,14 @@ class SaleHistoryWindow(QWidget):
 
         dialogo.exec()
 
+    def _mostrar_detalle_desde_grid(self, _index=None) -> None:
+        """Abre ventas; el doble clic en grupos solo expande o contrae."""
+        if self._selected_sale() is not None:
+            self._mostrar_detalle()
+
     def _exportar_ticket(self) -> None:
-        fila = self.tabla.currentRow()
-        if fila < 0 or fila >= len(self.sales):
+        sale = self._selected_sale()
+        if sale is None:
             QMessageBox.information(
                 self,
                 "Selecciona una venta",
@@ -585,7 +614,6 @@ class SaleHistoryWindow(QWidget):
             )
             return
 
-        sale = self.sales[fila]
         destination, _ = QFileDialog.getSaveFileName(
             self,
             "Guardar ticket de venta",
@@ -615,9 +643,8 @@ class SaleHistoryWindow(QWidget):
         )
 
     def _cancelar_venta(self) -> None:
-        fila = self.tabla.currentRow()
-
-        if fila < 0 or fila >= len(self.sales):
+        sale = self._selected_sale()
+        if sale is None:
             QMessageBox.information(
                 self,
                 "Selecciona una venta",
@@ -625,8 +652,6 @@ class SaleHistoryWindow(QWidget):
             )
 
             return
-
-        sale = self.sales[fila]
 
         if sale["cancelada"]:
             QMessageBox.information(
