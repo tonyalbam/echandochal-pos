@@ -1,5 +1,6 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt
 from PySide6.QtWidgets import (
+    QCompleter,
     QComboBox,
     QDoubleSpinBox,
     QHBoxLayout,
@@ -7,6 +8,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -15,6 +17,26 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.purchase_service import PurchaseService
+
+
+class ClearOnFocusLineEdit(QLineEdit):
+    """Limpia la búsqueda anterior al comenzar otra captura."""
+
+    def focusInEvent(self, event) -> None:
+        self.clear()
+        super().focusInEvent(event)
+
+
+class PurchaseItemsTable(QTableWidget):
+    """Grid de compra con eliminación rápida mediante D."""
+
+    delete_requested = Signal()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_D:
+            self.delete_requested.emit()
+            return
+        super().keyPressEvent(event)
 
 
 class PurchaseWindow(QWidget):
@@ -31,6 +53,8 @@ class PurchaseWindow(QWidget):
         self.service = PurchaseService(database)
 
         self.items: list[dict] = []
+        self.suggestion_products: dict[str, dict] = {}
+        self.ignore_next_return = False
 
         self._create_ui()
         self._load_suppliers()
@@ -86,15 +110,25 @@ class PurchaseWindow(QWidget):
             QLabel("Producto:")
         )
 
-        self.product_search = QLineEdit()
+        self.product_search = ClearOnFocusLineEdit()
 
         self.product_search.setPlaceholderText(
-            "Código interno o código de barras..."
+            "Código, código de barras, nombre o marca..."
         )
 
         self.product_search.returnPressed.connect(
             self._add_product
         )
+        self.suggestion_model = QStringListModel(self)
+        self.completer = QCompleter(self.suggestion_model, self)
+        self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.completer.setCompletionMode(
+            QCompleter.CompletionMode.UnfilteredPopupCompletion
+        )
+        self.completer.setMaxVisibleItems(12)
+        self.completer.activated.connect(self._add_suggestion)
+        self.product_search.setCompleter(self.completer)
+        self.product_search.textEdited.connect(self._update_suggestions)
 
         product_layout.addWidget(
             self.product_search,
@@ -118,15 +152,18 @@ class PurchaseWindow(QWidget):
         )
 
         # Tabla de productos
-        self.table = QTableWidget(
+        self.table = PurchaseItemsTable(
             0,
-            5,
+            8,
         )
 
         self.table.setHorizontalHeaderLabels(
             [
                 "Código",
                 "Producto",
+                "Marca",
+                "Color",
+                "Categoría",
                 "Cantidad",
                 "Costo unitario",
                 "Subtotal",
@@ -144,6 +181,7 @@ class PurchaseWindow(QWidget):
         self.table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
         )
+        self.table.delete_requested.connect(self._remove_selected_line)
 
         self.table.horizontalHeader().setStretchLastSection(
             True
@@ -161,14 +199,12 @@ class PurchaseWindow(QWidget):
             QLabel("Cantidad:")
         )
 
-        self.quantity = QDoubleSpinBox()
+        self.quantity = QSpinBox()
 
         self.quantity.setRange(
-            0.001,
-            999999.999,
+            1,
+            999999,
         )
-
-        self.quantity.setDecimals(3)
 
         self.quantity.setValue(1)
 
@@ -329,57 +365,53 @@ class PurchaseWindow(QWidget):
                 row["id"],
             )
 
-    def _find_product(
-        self,
-        code: str,
-    ) -> dict | None:
-        code = code.strip()
-
-        if not code:
-            return None
-
-        cursor = self.database.cursor()
-
-        cursor.execute(
-            """
-            SELECT
-                p.id,
-                p.codigo,
-                p.codigo_barras,
-                p.nombre,
-                p.costo,
-                p.unidad,
-                p.existencia
-            FROM productos p
-            WHERE p.activo = 1
-              AND (
-                  p.codigo = ?
-                  OR p.codigo_barras = ?
-              )
-            LIMIT 1
-            """,
-            (
-                code,
-                code,
-            ),
-        )
-
-        row = cursor.fetchone()
-
-        return dict(row) if row else None
-
     def _add_product(self) -> None:
-        product = self._find_product(
-            self.product_search.text()
-        )
+        if self.ignore_next_return:
+            self.ignore_next_return = False
+            self.product_search.clear()
+            return
+
+        query = self.product_search.text().strip()
+        product = self.service.find_product(query)
+        if product is None:
+            matches = self.service.search_products(query)
+            product = matches[0] if matches else None
 
         if product is None:
             QMessageBox.warning(
                 self,
                 "Producto no encontrado",
-                "No se encontró un producto activo con ese código.",
+                "No se encontró un producto activo que coincida con la "
+                "búsqueda.",
             )
             return
+
+        self._append_product(product)
+
+    def _update_suggestions(self, text: str) -> None:
+        products = self.service.search_products(text)
+        self.suggestion_products = {}
+        labels = []
+        for product in products:
+            brand = f" | {product['marca']}" if product["marca"] else ""
+            label = f"{product['codigo']} | {product['nombre']}{brand}"
+            labels.append(label)
+            self.suggestion_products[label] = product
+        self.suggestion_model.setStringList(labels)
+        if labels:
+            self.completer.complete()
+
+    def _add_suggestion(self, label: str) -> None:
+        product = self.suggestion_products.get(label)
+        if product:
+            self.ignore_next_return = True
+            self._append_product(product)
+            QTimer.singleShot(0, self._reset_return_guard)
+
+    def _reset_return_guard(self) -> None:
+        self.ignore_next_return = False
+
+    def _append_product(self, product: dict) -> None:
 
         for index, item in enumerate(
             self.items
@@ -403,7 +435,10 @@ class PurchaseWindow(QWidget):
             "producto_id": product["id"],
             "codigo": product["codigo"],
             "nombre": product["nombre"],
-            "cantidad": 1.0,
+            "marca": product["marca"],
+            "color": product["color"],
+            "categoria": product["categoria"],
+            "cantidad": 1,
             "costo_unitario": cost,
         }
 
@@ -439,9 +474,7 @@ class PurchaseWindow(QWidget):
             )
             return
 
-        self.items[row]["cantidad"] = float(
-            self.quantity.value()
-        )
+        self.items[row]["cantidad"] = int(self.quantity.value())
 
         self.items[row]["costo_unitario"] = float(
             self.unit_cost.value()
@@ -494,7 +527,10 @@ class PurchaseWindow(QWidget):
             values = [
                 item["codigo"],
                 item["nombre"],
-                f"{quantity:g}",
+                item["marca"],
+                item["color"],
+                item["categoria"],
+                "",
                 f"$ {unit_cost:,.2f}",
                 f"$ {subtotal:,.2f}",
             ]
@@ -506,7 +542,7 @@ class PurchaseWindow(QWidget):
                     str(value)
                 )
 
-                if column >= 2:
+                if column >= 5:
                     table_item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight
                         | Qt.AlignmentFlag.AlignVCenter
@@ -518,11 +554,35 @@ class PurchaseWindow(QWidget):
                     table_item,
                 )
 
+            quantity_input = QSpinBox()
+            quantity_input.setRange(1, 999999)
+            quantity_input.setValue(int(quantity))
+            quantity_input.valueChanged.connect(
+                lambda value, index=row: self._change_row_quantity(index, value)
+            )
+            self.table.setCellWidget(row, 5, quantity_input)
+
         self.table.resizeColumnsToContents()
 
         self.total_label.setText(
             f"Total: $ {total:,.2f}"
         )
+
+    def _change_row_quantity(self, row: int, quantity: int) -> None:
+        if not 0 <= row < len(self.items):
+            return
+        self.items[row]["cantidad"] = int(quantity)
+        subtotal = round(
+            quantity * float(self.items[row]["costo_unitario"]), 2
+        )
+        subtotal_item = self.table.item(row, 7)
+        if subtotal_item is not None:
+            subtotal_item.setText(f"$ {subtotal:,.2f}")
+        total = sum(
+            int(item["cantidad"]) * float(item["costo_unitario"])
+            for item in self.items
+        )
+        self.total_label.setText(f"Total: $ {total:,.2f}")
 
     def _save_purchase(self) -> None:
         if not self.items:
@@ -534,6 +594,14 @@ class PurchaseWindow(QWidget):
             return
 
         supplier_id = self.supplier.currentData()
+        if supplier_id is None or self.supplier.currentText() == "Sin proveedor":
+            QMessageBox.warning(
+                self,
+                "Proveedor requerido",
+                "Debes seleccionar un proveedor para registrar la compra.",
+            )
+            self.supplier.setFocus()
+            return
 
         items = [
             {

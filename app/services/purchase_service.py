@@ -16,6 +16,71 @@ class PurchaseService:
     def __init__(self, database: Database) -> None:
         self.database = database
 
+    def find_product(self, code: str) -> dict | None:
+        """Busca un producto activo por código interno o código de barras."""
+        code = code.strip()
+        if not code:
+            return None
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT
+                p.id, p.codigo, p.codigo_barras, p.nombre, p.costo,
+                p.unidad, p.existencia,
+                COALESCE(p.marca, '') AS marca,
+                COALESCE(p.color, '') AS color,
+                COALESCE(c.nombre, '') AS categoria
+            FROM productos p
+            LEFT JOIN categorias c ON c.id = p.categoria_id
+            WHERE p.activo = 1
+              AND (p.codigo = ? OR p.codigo_barras = ?)
+            LIMIT 1
+            """,
+            (code, code),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def search_products(self, query: str, limit: int = 20) -> list[dict]:
+        """Busca productos activos para el autocompletado de compras."""
+        query = query.strip()
+        if not query:
+            return []
+        pattern = f"%{query}%"
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT
+                p.id, p.codigo, p.codigo_barras, p.nombre, p.costo,
+                p.unidad, p.existencia,
+                COALESCE(p.marca, '') AS marca,
+                COALESCE(p.color, '') AS color,
+                COALESCE(c.nombre, '') AS categoria
+            FROM productos p
+            LEFT JOIN categorias c ON c.id = p.categoria_id
+            WHERE p.activo = 1
+              AND (
+                  p.codigo LIKE ?
+                  OR COALESCE(p.codigo_barras, '') LIKE ?
+                  OR p.nombre LIKE ?
+                  OR COALESCE(p.marca, '') LIKE ?
+              )
+            ORDER BY
+                CASE
+                    WHEN p.codigo = ? OR p.codigo_barras = ? THEN 0
+                    WHEN p.nombre LIKE ? THEN 1
+                    ELSE 2
+                END,
+                p.nombre COLLATE NOCASE
+            LIMIT ?
+            """,
+            (
+                pattern, pattern, pattern, pattern,
+                query, query, f"{query}%", int(limit),
+            ),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
     def create_purchase(
         self,
         items: list[dict],
@@ -37,6 +102,21 @@ class PurchaseService:
                 "La compra no contiene productos."
             )
 
+        if supplier_id is None:
+            raise ValueError("Debes seleccionar un proveedor para la compra.")
+
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT id
+            FROM proveedores
+            WHERE id = ? AND activo = 1
+            """,
+            (int(supplier_id),),
+        )
+        if cursor.fetchone() is None:
+            raise ValueError("El proveedor seleccionado no está disponible.")
+
         subtotal = 0.0
 
         for item in items:
@@ -46,6 +126,11 @@ class PurchaseService:
             if quantity <= 0:
                 raise ValueError(
                     "La cantidad debe ser mayor que cero."
+                )
+
+            if not quantity.is_integer():
+                raise ValueError(
+                    "La cantidad de compra debe ser un número entero."
                 )
 
             if unit_cost < 0:
@@ -62,8 +147,6 @@ class PurchaseService:
 
         fecha = now.strftime("%Y-%m-%d")
         folio = self._next_folio(fecha)
-
-        cursor = self.database.cursor()
 
         try:
             cursor.execute("BEGIN")
