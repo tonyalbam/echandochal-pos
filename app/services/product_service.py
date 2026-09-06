@@ -20,16 +20,22 @@ class ProductService:
     def __init__(self, database: Database) -> None:
         self.database = database
 
-    def list_products(self, search: str = "") -> list[dict]:
+    def list_products(
+        self,
+        search: str = "",
+        include_inactive: bool = False,
+    ) -> list[dict]:
         cursor = self.database.cursor()
 
         search = search.strip()
+        active_filter = "" if include_inactive else "WHERE p.activo = 1"
 
         if search:
             pattern = f"%{search}%"
+            search_prefix = "WHERE" if include_inactive else "AND"
 
             cursor.execute(
-                """
+                f"""
                 SELECT
                     p.id,
                     p.codigo,
@@ -51,8 +57,8 @@ class ProductService:
                     ON c.id = p.categoria_id
                 LEFT JOIN proveedores pr
                     ON pr.id = p.proveedor_id
-                WHERE p.activo = 1
-                  AND (
+                {active_filter}
+                  {search_prefix} (
                       p.codigo LIKE ?
                       OR COALESCE(p.codigo_barras, '') LIKE ?
                       OR COALESCE(p.codigo_qr, '') LIKE ?
@@ -60,13 +66,13 @@ class ProductService:
                       OR COALESCE(p.marca, '') LIKE ?
                       OR COALESCE(p.color, '') LIKE ?
                   )
-                ORDER BY p.nombre COLLATE NOCASE
+                ORDER BY p.activo DESC, p.nombre COLLATE NOCASE
                 """,
                 (pattern, pattern, pattern, pattern, pattern, pattern),
             )
         else:
             cursor.execute(
-                """
+                f"""
                 SELECT
                     p.id,
                     p.codigo,
@@ -88,8 +94,8 @@ class ProductService:
                     ON c.id = p.categoria_id
                 LEFT JOIN proveedores pr
                     ON pr.id = p.proveedor_id
-                WHERE p.activo = 1
-                ORDER BY p.nombre COLLATE NOCASE
+                {active_filter}
+                ORDER BY p.activo DESC, p.nombre COLLATE NOCASE
                 """
             )
 

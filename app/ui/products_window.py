@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -17,6 +18,14 @@ from app.database.connection import Database
 from app.services.product_service import ProductService
 from app.services.label_service import LabelService
 from app.ui.product_dialog import ProductDialog
+
+
+class ClearOnFocusLineEdit(QLineEdit):
+    """Limpia la búsqueda anterior al iniciar una nueva consulta."""
+
+    def focusInEvent(self, event) -> None:
+        self.clear()
+        super().focusInEvent(event)
 
 
 class ProductsWindow(QWidget):
@@ -62,7 +71,7 @@ class ProductsWindow(QWidget):
         search_layout = QHBoxLayout()
 
         search_label = QLabel("Buscar:")
-        self.search = QLineEdit()
+        self.search = ClearOnFocusLineEdit()
         self.search.setPlaceholderText(
             "Nombre, código interno, código de barras o QR..."
         )
@@ -133,7 +142,8 @@ class ProductsWindow(QWidget):
 
     def _load_products(self) -> None:
         products = self.service.list_products(
-            self.search.text()
+            self.search.text(),
+            include_inactive=True,
         )
 
         self.table.setRowCount(0)
@@ -165,6 +175,9 @@ class ProductsWindow(QWidget):
                         Qt.AlignmentFlag.AlignRight
                         | Qt.AlignmentFlag.AlignVCenter
                     )
+
+                if not product["activo"]:
+                    item.setBackground(QColor("#F1666D"))
 
                 self.table.setItem(row, column, item)
 

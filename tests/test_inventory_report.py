@@ -79,6 +79,21 @@ class InventoryReportTest(unittest.TestCase):
         self.assertEqual(report["total_productos"], 1)
         self.assertEqual(report["productos"][0]["codigo"], "P-2")
 
+    def test_catalog_includes_inactive_products_at_the_end(self) -> None:
+        products = self.service.list_products(include_inactive=True)
+
+        self.assertEqual(len(products), 4)
+        self.assertTrue(all(product["activo"] for product in products[:3]))
+        self.assertEqual(products[-1]["codigo"], "P-4")
+        self.assertEqual(products[-1]["activo"], 0)
+
+    def test_catalog_search_can_find_an_inactive_product(self) -> None:
+        products = self.service.list_products(
+            "inactivo", include_inactive=True
+        )
+
+        self.assertEqual([product["codigo"] for product in products], ["P-4"])
+
     def test_export_inventory_report_contains_auditable_formulas(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = self.service.export_inventory_report(
