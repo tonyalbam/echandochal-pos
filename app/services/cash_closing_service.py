@@ -23,13 +23,10 @@ class CashClosingService:
     """Calcula y exporta el corte diario de ventas."""
 
     PAYMENT_METHODS = ("Efectivo", "Transferencia", "Mercado Libre")
-    DENOMINATIONS = (
+    BILL_DENOMINATIONS = (
         ("Billete", 1000.0), ("Billete", 500.0),
         ("Billete", 200.0), ("Billete", 100.0),
         ("Billete", 50.0), ("Billete", 20.0),
-        ("Moneda", 20.0), ("Moneda", 10.0),
-        ("Moneda", 5.0), ("Moneda", 2.0),
-        ("Moneda", 1.0), ("Moneda", 0.5),
     )
 
     def __init__(self, database: Database) -> None:
@@ -158,13 +155,14 @@ class CashClosingService:
         self,
         closing_date: str,
         counts: dict[tuple[str, float], int] | None = None,
+        loose_change: float = 0.0,
     ) -> dict:
         """Compara el efectivo contado contra las ventas en efectivo."""
 
         counts = counts or {}
         rows = []
         total_counted = 0.0
-        for kind, denomination in self.DENOMINATIONS:
+        for kind, denomination in self.BILL_DENOMINATIONS:
             quantity = max(0, int(counts.get((kind, denomination), 0)))
             amount = round(denomination * quantity, 2)
             total_counted += amount
@@ -174,6 +172,8 @@ class CashClosingService:
                 "cantidad": quantity,
                 "importe": amount,
             })
+        loose_change = round(max(0.0, float(loose_change)), 2)
+        total_counted += loose_change
 
         closing = self.get_daily_closing(closing_date)
         expected = next(
@@ -185,6 +185,7 @@ class CashClosingService:
         return {
             "fecha": closing_date,
             "denominaciones": rows,
+            "morralla": loose_change,
             "efectivo_esperado": round(expected, 2),
             "efectivo_contado": round(total_counted, 2),
             "diferencia": difference,
@@ -198,9 +199,12 @@ class CashClosingService:
         closing_date: str,
         destination: str | Path,
         cash_counts: dict[tuple[str, float], int] | None = None,
+        loose_change: float = 0.0,
     ) -> Path:
         data = self.get_daily_closing(closing_date)
-        cash = self.calculate_cash_reconciliation(closing_date, cash_counts)
+        cash = self.calculate_cash_reconciliation(
+            closing_date, cash_counts, loose_change
+        )
         output_path = Path(destination)
         if output_path.suffix.lower() != ".xlsx":
             output_path = output_path.with_suffix(".xlsx")
@@ -283,6 +287,9 @@ class CashClosingService:
             sheet.cell(row_number, 2).number_format = money
             sheet.cell(row_number, 4).number_format = money
             row_number += 1
+        sheet.cell(row_number, 1, "Morralla")
+        sheet.cell(row_number, 4, cash["morralla"]).number_format = money
+        row_number += 1
         for label, value, format_code in (
             ("Efectivo esperado", cash["efectivo_esperado"], money),
             ("Efectivo contado", cash["efectivo_contado"], money),
@@ -305,9 +312,12 @@ class CashClosingService:
         closing_date: str,
         destination: str | Path,
         cash_counts: dict[tuple[str, float], int] | None = None,
+        loose_change: float = 0.0,
     ) -> Path:
         data = self.get_daily_closing(closing_date)
-        cash = self.calculate_cash_reconciliation(closing_date, cash_counts)
+        cash = self.calculate_cash_reconciliation(
+            closing_date, cash_counts, loose_change
+        )
         output_path = Path(destination)
         if output_path.suffix.lower() != ".pdf":
             output_path = output_path.with_suffix(".pdf")
@@ -377,6 +387,7 @@ class CashClosingService:
                 str(denomination["cantidad"]),
                 f"${denomination['importe']:,.2f}",
             ])
+        cash_data.append(["Morralla", "", "", f"${cash['morralla']:,.2f}"])
         cash_table = Table(cash_data, repeatRows=1)
         cash_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),

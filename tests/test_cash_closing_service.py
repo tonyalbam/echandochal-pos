@@ -108,13 +108,29 @@ class CashClosingServiceTest(unittest.TestCase):
         self.assertEqual(closing["numero_tickets"], 0)
         self.assertEqual(closing["productos_vendidos"], 0.0)
 
+    def test_cash_reconciliation_adds_loose_change_as_one_amount(self) -> None:
+        cash = self.service.calculate_cash_reconciliation(
+            "2026-08-30", {("Billete", 50.0): 1}, 50.0
+        )
+
+        self.assertEqual(cash["morralla"], 50.0)
+        self.assertEqual(cash["efectivo_esperado"], 100.0)
+        self.assertEqual(cash["efectivo_contado"], 100.0)
+        self.assertEqual(cash["diferencia"], 0.0)
+        self.assertEqual(cash["estado"], "CUADRA")
+        self.assertTrue(all(
+            row["tipo"] == "Billete" for row in cash["denominaciones"]
+        ))
+
     def test_exports_excel_and_pdf(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             excel_path = self.service.export_excel(
-                "2026-08-30", Path(directory) / "corte.xlsx"
+                "2026-08-30", Path(directory) / "corte.xlsx",
+                {("Billete", 50.0): 1}, 50.0,
             )
             pdf_path = self.service.export_pdf(
-                "2026-08-30", Path(directory) / "corte.pdf"
+                "2026-08-30", Path(directory) / "corte.pdf",
+                {("Billete", 50.0): 1}, 50.0,
             )
 
             workbook = load_workbook(excel_path, data_only=False)
@@ -123,6 +139,8 @@ class CashClosingServiceTest(unittest.TestCase):
             self.assertEqual(sheet["C4"].value, 100.0)
             self.assertEqual(sheet["B9"].value, 600.0)
             self.assertEqual(sheet["B14"].value, 308.0)
+            self.assertEqual(sheet["A25"].value, "Morralla")
+            self.assertEqual(sheet["D25"].value, 50.0)
             workbook.close()
 
             reader = PdfReader(pdf_path)
@@ -135,6 +153,7 @@ class CashClosingServiceTest(unittest.TestCase):
             self.assertIn("$600.00", text)
             self.assertIn("Utilidad del día", text)
             self.assertIn("Arqueo manual de efectivo", text)
+            self.assertIn("Morralla", text)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QDateEdit,
+    QDoubleSpinBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -95,31 +96,31 @@ class CashClosingWindow(QWidget):
         cash_layout.addWidget(QLabel("Denominación"), 0, 1)
         cash_layout.addWidget(QLabel("Cantidad"), 0, 2)
         cash_layout.addWidget(QLabel("Importe"), 0, 3)
-        cash_layout.addWidget(QLabel("Tipo"), 0, 5)
-        cash_layout.addWidget(QLabel("Denominación"), 0, 6)
-        cash_layout.addWidget(QLabel("Cantidad"), 0, 7)
-        cash_layout.addWidget(QLabel("Importe"), 0, 8)
         self.cash_inputs = {}
         self.cash_amounts = {}
-        bills = [row for row in self.service.DENOMINATIONS if row[0] == "Billete"]
-        coins = [row for row in self.service.DENOMINATIONS if row[0] == "Moneda"]
-        for side, denominations in enumerate((bills, coins)):
-            base_column = 0 if side == 0 else 5
-            for row, (kind, denomination) in enumerate(denominations, start=1):
-                cash_layout.addWidget(QLabel(kind), row, base_column)
-                cash_layout.addWidget(
-                    QLabel(f"$ {denomination:,.2f}"), row, base_column + 1
-                )
-                quantity = QSpinBox()
-                quantity.setRange(0, 9999)
-                quantity.valueChanged.connect(self._update_cash_reconciliation)
-                cash_layout.addWidget(quantity, row, base_column + 2)
-                amount = QLabel("$ 0.00")
-                amount.setAlignment(Qt.AlignmentFlag.AlignRight)
-                cash_layout.addWidget(amount, row, base_column + 3)
-                key = (kind, denomination)
-                self.cash_inputs[key] = quantity
-                self.cash_amounts[key] = amount
+        for row, (kind, denomination) in enumerate(
+            self.service.BILL_DENOMINATIONS, start=1
+        ):
+            cash_layout.addWidget(QLabel(kind), row, 0)
+            cash_layout.addWidget(QLabel(f"$ {denomination:,.2f}"), row, 1)
+            quantity = QSpinBox()
+            quantity.setRange(0, 9999)
+            quantity.valueChanged.connect(self._update_cash_reconciliation)
+            cash_layout.addWidget(quantity, row, 2)
+            amount = QLabel("$ 0.00")
+            amount.setAlignment(Qt.AlignmentFlag.AlignRight)
+            cash_layout.addWidget(amount, row, 3)
+            key = (kind, denomination)
+            self.cash_inputs[key] = quantity
+            self.cash_amounts[key] = amount
+
+        cash_layout.addWidget(QLabel("Morralla"), 1, 5)
+        self.loose_change = QDoubleSpinBox()
+        self.loose_change.setRange(0, 999999.99)
+        self.loose_change.setDecimals(2)
+        self.loose_change.setPrefix("$ ")
+        self.loose_change.valueChanged.connect(self._update_cash_reconciliation)
+        cash_layout.addWidget(self.loose_change, 1, 6, 1, 2)
 
         self.cash_expected = QLabel("$ 0.00")
         self.cash_counted = QLabel("$ 0.00")
@@ -146,6 +147,9 @@ class CashClosingWindow(QWidget):
             widget.blockSignals(True)
             widget.setValue(0)
             widget.blockSignals(False)
+        self.loose_change.blockSignals(True)
+        self.loose_change.setValue(0)
+        self.loose_change.blockSignals(False)
         self.refresh()
 
     def refresh(self) -> None:
@@ -182,7 +186,7 @@ class CashClosingWindow(QWidget):
 
     def _update_cash_reconciliation(self) -> None:
         cash = self.service.calculate_cash_reconciliation(
-            self._selected_date(), self._cash_counts()
+            self._selected_date(), self._cash_counts(), self.loose_change.value()
         )
         for row in cash["denominaciones"]:
             key = (row["tipo"], row["denominacion"])
@@ -216,7 +220,9 @@ class CashClosingWindow(QWidget):
 
     def _run_export(self, exporter, date: str, destination: str) -> None:
         try:
-            output_path = exporter(date, destination, self._cash_counts())
+            output_path = exporter(
+                date, destination, self._cash_counts(), self.loose_change.value()
+            )
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "No se pudo exportar", str(error))
             return
