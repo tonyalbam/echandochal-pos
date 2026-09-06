@@ -1,4 +1,4 @@
-from PySide6.QtCore import Signal, QStringListModel, Qt
+from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QCompleter,
@@ -24,6 +24,7 @@ from app.services.sale_cart_service import (
     calculate_discount,
     expand_sale_items,
     group_sale_items,
+    has_available_inventory,
 )
 from app.services.sale_service import SaleService
 from app.services.ticket_service import TicketService
@@ -107,6 +108,7 @@ class SaleWindow(QWidget):
         self.last_sale_id: int | None = None
         self.suggestion_products: dict[str, dict] = {}
         self.discount_mode = "Monto"
+        self.ignore_next_return = False
 
         self._crear_interfaz()
         self._actualizar_totales()
@@ -356,6 +358,11 @@ class SaleWindow(QWidget):
         layout.addLayout(botones)
 
     def _agregar_por_codigo(self) -> None:
+        if self.ignore_next_return:
+            self.ignore_next_return = False
+            self.codigo_input.clear()
+            return
+
         codigo = self.codigo_input.text().strip()
 
         if not codigo:
@@ -400,30 +407,30 @@ class SaleWindow(QWidget):
     def _agregar_sugerencia(self, label: str) -> None:
         product = self.suggestion_products.get(label)
         if product:
+            # Enter sobre el popup también dispara returnPressed en QLineEdit.
+            # La bandera evita procesar esa misma pulsación por segunda vez y
+            # se restablece al terminar el evento, para no ignorar otro escaneo.
+            self.ignore_next_return = True
             self._seleccionar_pago_y_agregar(product)
+            QTimer.singleShot(0, self._reset_return_guard)
+
+    def _reset_return_guard(self) -> None:
+        self.ignore_next_return = False
 
     def _seleccionar_pago_y_agregar(self, producto: dict) -> None:
         self.codigo_input.clear()
+        if not self._hay_inventario_disponible(producto):
+            self._mostrar_sin_inventario()
+            self.codigo_input.setFocus()
+            return
         dialog = PaymentMethodDialog(producto["nombre"], self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._agregar_producto(producto, dialog.payment_method)
         self.codigo_input.setFocus()
 
     def _agregar_producto(self, producto: dict, payment_method: str) -> None:
-        current_quantity = sum(
-            float(item["cantidad"])
-            for item in self.items
-            if item["producto_id"] == producto["id"]
-        )
-        if current_quantity + 1 > float(producto["existencia"]):
-            QMessageBox.warning(
-                self,
-                "Existencia insuficiente",
-                (
-                    f"Solo hay {producto['existencia']:g} disponibles de "
-                    f"'{producto['nombre']}'."
-                ),
-            )
+        if not self._hay_inventario_disponible(producto):
+            self._mostrar_sin_inventario()
             self.codigo_input.setFocus()
             return
 
@@ -459,6 +466,18 @@ class SaleWindow(QWidget):
 
         self.codigo_input.clear()
         self.codigo_input.setFocus()
+
+    def _hay_inventario_disponible(self, producto: dict) -> bool:
+        return has_available_inventory(
+            producto["id"], producto["existencia"], self.items
+        )
+
+    def _mostrar_sin_inventario(self) -> None:
+        QMessageBox.warning(
+            self,
+            "Sin inventario",
+            "¡Ya no hay inventario disponible! Favor de agregar más producto",
+        )
 
     def _cambiar_modo_volumen(self, checked: bool) -> None:
         if checked:

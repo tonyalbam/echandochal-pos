@@ -4,6 +4,7 @@ from app.services.sale_cart_service import (
     calculate_discount,
     expand_sale_items,
     group_sale_items,
+    has_available_inventory,
 )
 
 
@@ -46,6 +47,17 @@ class SaleCartServiceTest(unittest.TestCase):
     def test_percentage_discount_returns_money_amount(self) -> None:
         self.assertEqual(calculate_discount(850, 10, "Porcentaje"), 85)
         self.assertEqual(calculate_discount(850, 85, "Monto"), 85)
+
+    def test_inventory_accounts_for_units_already_in_cart(self) -> None:
+        items = [
+            {"producto_id": 1, "cantidad": 1},
+            {"producto_id": 1, "cantidad": 1},
+        ]
+        self.assertFalse(has_available_inventory(1, 2, items))
+        self.assertTrue(has_available_inventory(1, 3, items))
+
+    def test_zero_inventory_is_never_available(self) -> None:
+        self.assertFalse(has_available_inventory(1, 0, []))
 
 
 if __name__ == "__main__":

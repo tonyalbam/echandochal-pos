@@ -36,3 +36,17 @@ def calculate_discount(subtotal: float, value: float, mode: str) -> float:
     if mode == "Porcentaje":
         return round(float(subtotal) * float(value) / 100, 2)
     return round(float(value), 2)
+
+
+def has_available_inventory(
+    product_id: int,
+    inventory: float,
+    items: list[dict],
+) -> bool:
+    """Indica si todavía puede agregarse una unidad al carrito."""
+    quantity_in_cart = sum(
+        float(item["cantidad"])
+        for item in items
+        if int(item["producto_id"]) == int(product_id)
+    )
+    return quantity_in_cart + 1 <= float(inventory)
