@@ -123,6 +123,29 @@ class TicketServiceTest(unittest.TestCase):
             text = PdfReader(output_path).pages[0].extract_text()
             self.assertIn("VENTA CANCELADA", text)
 
+    def test_ticket_hides_discount_when_none_was_applied(self) -> None:
+        cursor = self.database.cursor()
+        product_id = int(
+            cursor.execute(
+                "SELECT id FROM productos WHERE codigo = 'P-1'"
+            ).fetchone()["id"]
+        )
+        sale = SaleService(self.database).create_sale(
+            items=[{
+                "producto_id": product_id,
+                "cantidad": 1,
+                "precio_unitario": 85,
+                "metodo_pago": "Efectivo",
+            }],
+            discount=0,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = TicketService(self.database).generate_sale_ticket(
+                sale["id"], Path(directory) / "sin_descuento.pdf"
+            )
+            text = PdfReader(output_path).pages[0].extract_text()
+            self.assertNotIn("Descuento", text)
+
     def test_missing_sale_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             TicketService(self.database).generate_sale_ticket(

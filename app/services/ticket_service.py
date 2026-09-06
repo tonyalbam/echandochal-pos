@@ -233,11 +233,10 @@ class TicketService:
         document.line(self.MARGIN, y, self.WIDTH - self.MARGIN, y)
         y -= 14
 
-        totals = (
-            ("Subtotal", sale["subtotal"]),
-            ("Descuento", sale["descuento"]),
-            ("Total", sale["total"]),
-        )
+        totals = [("Subtotal", sale["subtotal"])]
+        if float(sale["descuento"]) > 0:
+            totals.append(("Descuento", sale["descuento"]))
+        totals.append(("Total", sale["total"]))
         for label, value in totals:
             document.setFont(
                 "Helvetica-Bold" if label == "Total" else "Helvetica",

@@ -1,7 +1,9 @@
-from PySide6.QtCore import QStringListModel, Qt
+from PySide6.QtCore import Signal, QStringListModel, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QCompleter,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFrame,
     QFileDialog,
@@ -18,6 +20,11 @@ from PySide6.QtWidgets import (
 )
 
 from app.database.connection import Database
+from app.services.sale_cart_service import (
+    calculate_discount,
+    expand_sale_items,
+    group_sale_items,
+)
 from app.services.sale_service import SaleService
 from app.services.ticket_service import TicketService
 
@@ -28,6 +35,63 @@ class ClearOnFocusLineEdit(QLineEdit):
     def focusInEvent(self, event) -> None:
         self.clear()
         super().focusInEvent(event)
+
+
+class PaymentMethodDialog(QDialog):
+    """Selector de pago operable con una sola tecla."""
+
+    METHODS = {
+        Qt.Key.Key_1: "Efectivo",
+        Qt.Key.Key_2: "Transferencia",
+        Qt.Key.Key_3: "Mercado Libre",
+    }
+
+    def __init__(self, product_name: str, parent=None) -> None:
+        super().__init__(parent)
+        self.payment_method: str | None = None
+        self.setWindowTitle("Forma de pago")
+        self.setModal(True)
+        self.setMinimumWidth(360)
+
+        layout = QVBoxLayout(self)
+        title = QLabel(f"Forma de pago para:\n{product_name}")
+        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        help_text = QLabel(
+            "Presiona una tecla, sin escribir en ningún campo:\n\n"
+            "1  -  Efectivo\n"
+            "2  -  Transferencia\n"
+            "3  -  Mercado Libre"
+        )
+        help_text.setStyleSheet("font-size: 15px;")
+        layout.addWidget(help_text)
+
+        cancel = QPushButton("Cancelar")
+        cancel.setMinimumHeight(38)
+        cancel.clicked.connect(self.reject)
+        layout.addWidget(cancel)
+
+    def keyPressEvent(self, event) -> None:
+        method = self.METHODS.get(event.key())
+        if method is not None:
+            self.payment_method = method
+            self.accept()
+            return
+        super().keyPressEvent(event)
+
+
+class SaleItemsTable(QTableWidget):
+    """Tabla del carrito con eliminación rápida mediante la tecla D."""
+
+    delete_requested = Signal()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_D:
+            self.delete_requested.emit()
+            return
+        super().keyPressEvent(event)
 
 
 class SaleWindow(QWidget):
@@ -42,6 +106,7 @@ class SaleWindow(QWidget):
         self.items: list[dict] = []
         self.last_sale_id: int | None = None
         self.suggestion_products: dict[str, dict] = {}
+        self.discount_mode = "Monto"
 
         self._crear_interfaz()
         self._actualizar_totales()
@@ -104,7 +169,24 @@ class SaleWindow(QWidget):
 
         layout.addLayout(entrada_layout)
 
-        self.tabla = QTableWidget(0, 10)
+        mode_layout = QHBoxLayout()
+        self.venta_voluminosa = QCheckBox("Venta voluminosa")
+        self.venta_voluminosa.setToolTip(
+            "Agrupa en una fila las unidades del mismo producto."
+        )
+        self.venta_voluminosa.toggled.connect(
+            self._cambiar_modo_volumen
+        )
+        mode_help = QLabel(
+            "Desactivada: cada unidad se muestra y cobra por separado."
+        )
+        mode_help.setStyleSheet("color: #94A3B8;")
+        mode_layout.addWidget(self.venta_voluminosa)
+        mode_layout.addWidget(mode_help)
+        mode_layout.addStretch()
+        layout.addLayout(mode_layout)
+
+        self.tabla = SaleItemsTable(0, 10)
 
         self.tabla.setHorizontalHeaderLabels(
             [
@@ -128,6 +210,7 @@ class SaleWindow(QWidget):
         self.tabla.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
         )
+        self.tabla.delete_requested.connect(self._quitar_fila_seleccionada)
 
         self.tabla.verticalHeader().setVisible(False)
 
@@ -156,6 +239,13 @@ class SaleWindow(QWidget):
             5,
         )
 
+        self.descuento_tipo = QComboBox()
+        self.descuento_tipo.addItems(("Monto", "Porcentaje"))
+        self.descuento_tipo.setMinimumHeight(36)
+        self.descuento_tipo.currentTextChanged.connect(
+            self._cambiar_tipo_descuento
+        )
+
         self.descuento = QDoubleSpinBox()
 
         self.descuento.setRange(
@@ -175,6 +265,8 @@ class SaleWindow(QWidget):
         controles_layout.addWidget(
             QLabel("Descuento:")
         )
+
+        controles_layout.addWidget(self.descuento_tipo)
 
         controles_layout.addWidget(
             self.descuento
@@ -290,7 +382,7 @@ class SaleWindow(QWidget):
 
             return
 
-        self._agregar_producto(producto)
+        self._seleccionar_pago_y_agregar(producto)
 
     def _actualizar_sugerencias(self, text: str) -> None:
         products = self.service.search_products(text)
@@ -308,44 +400,41 @@ class SaleWindow(QWidget):
     def _agregar_sugerencia(self, label: str) -> None:
         product = self.suggestion_products.get(label)
         if product:
-            self._agregar_producto(product)
+            self._seleccionar_pago_y_agregar(product)
 
-    def _agregar_producto(self, producto: dict) -> None:
-        for item in self.items:
+    def _seleccionar_pago_y_agregar(self, producto: dict) -> None:
+        self.codigo_input.clear()
+        dialog = PaymentMethodDialog(producto["nombre"], self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._agregar_producto(producto, dialog.payment_method)
+        self.codigo_input.setFocus()
 
-            if item["producto_id"] == producto["id"]:
+    def _agregar_producto(self, producto: dict, payment_method: str) -> None:
+        current_quantity = sum(
+            float(item["cantidad"])
+            for item in self.items
+            if item["producto_id"] == producto["id"]
+        )
+        if current_quantity + 1 > float(producto["existencia"]):
+            QMessageBox.warning(
+                self,
+                "Existencia insuficiente",
+                (
+                    f"Solo hay {producto['existencia']:g} disponibles de "
+                    f"'{producto['nombre']}'."
+                ),
+            )
+            self.codigo_input.setFocus()
+            return
 
-                nueva_cantidad = (
-                    float(item["cantidad"]) + 1
-                )
-
-                if nueva_cantidad > float(
-                    producto["existencia"]
-                ):
-                    QMessageBox.warning(
-                        self,
-                        "Existencia insuficiente",
-                        (
-                            f"Solo hay "
-                            f"{producto['existencia']:g} "
-                            f"disponibles de "
-                            f"'{producto['nombre']}'."
-                        ),
-                    )
-
-                    self.codigo_input.clear()
+        if self.venta_voluminosa.isChecked():
+            for item in self.items:
+                if item["producto_id"] == producto["id"]:
+                    item["cantidad"] = float(item["cantidad"]) + 1
+                    item["metodo_pago"] = payment_method
+                    self._refrescar_tabla()
                     self.codigo_input.setFocus()
-
                     return
-
-                item["cantidad"] = nueva_cantidad
-
-                self._refrescar_tabla()
-
-                self.codigo_input.clear()
-                self.codigo_input.setFocus()
-
-                return
 
         self.items.append(
             {
@@ -362,7 +451,7 @@ class SaleWindow(QWidget):
                 "existencia": float(
                     producto["existencia"]
                 ),
-                "metodo_pago": "Efectivo",
+                "metodo_pago": payment_method,
             }
         )
 
@@ -370,6 +459,21 @@ class SaleWindow(QWidget):
 
         self.codigo_input.clear()
         self.codigo_input.setFocus()
+
+    def _cambiar_modo_volumen(self, checked: bool) -> None:
+        if checked:
+            self.items, had_mixed_payments = group_sale_items(self.items)
+            if had_mixed_payments:
+                QMessageBox.information(
+                    self,
+                    "Forma de pago agrupada",
+                    "Al agrupar se conservó para todas las unidades la forma "
+                    "de pago de la primera fila de cada producto. Puedes "
+                    "cambiarla en el grid.",
+                )
+        else:
+            self.items = expand_sale_items(self.items)
+        self._refrescar_tabla()
 
     def _refrescar_tabla(self) -> None:
         self.tabla.setRowCount(0)
@@ -485,6 +589,11 @@ class SaleWindow(QWidget):
 
             self.codigo_input.setFocus()
 
+    def _quitar_fila_seleccionada(self) -> None:
+        row = self.tabla.currentRow()
+        if row >= 0:
+            self._quitar_item(row)
+
     def _calcular_subtotal(
         self,
     ) -> float:
@@ -503,9 +612,7 @@ class SaleWindow(QWidget):
             self._calcular_subtotal()
         )
 
-        descuento = (
-            self.descuento.value()
-        )
+        descuento = self._calcular_descuento(subtotal)
 
         total = max(
             0.0,
@@ -555,6 +662,31 @@ class SaleWindow(QWidget):
             )
         )
 
+    def _calcular_descuento(self, subtotal: float | None = None) -> float:
+        subtotal = self._calcular_subtotal() if subtotal is None else subtotal
+        return calculate_discount(
+            subtotal, self.descuento.value(), self.discount_mode
+        )
+
+    def _cambiar_tipo_descuento(self, new_mode: str) -> None:
+        subtotal = self._calcular_subtotal()
+        current_discount = self._calcular_descuento(subtotal)
+        self.discount_mode = new_mode
+        self.descuento.blockSignals(True)
+        if new_mode == "Porcentaje":
+            self.descuento.setRange(0, 100)
+            self.descuento.setPrefix("")
+            self.descuento.setSuffix(" %")
+            value = (current_discount / subtotal * 100) if subtotal else 0
+        else:
+            self.descuento.setRange(0, 999999.99)
+            self.descuento.setSuffix("")
+            self.descuento.setPrefix("$ ")
+            value = current_discount
+        self.descuento.setValue(value)
+        self.descuento.blockSignals(False)
+        self._actualizar_totales()
+
     def _cobrar(self) -> None:
 
         if not self.items:
@@ -575,9 +707,7 @@ class SaleWindow(QWidget):
             self._calcular_subtotal()
         )
 
-        descuento = (
-            self.descuento.value()
-        )
+        descuento = self._calcular_descuento(subtotal)
 
         if descuento > subtotal:
             QMessageBox.warning(
@@ -721,6 +851,7 @@ class SaleWindow(QWidget):
 
         self.items.clear()
 
+        self.descuento_tipo.setCurrentText("Monto")
         self.descuento.setValue(0)
 
         self._refrescar_tabla()

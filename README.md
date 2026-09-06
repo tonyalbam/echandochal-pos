@@ -62,8 +62,15 @@ selecciona el registro y usa **Generar etiqueta**; la aplicación generará Code
 128, QR o ambos utilizando el código interno del producto.
 
 En **Nueva venta**, coloca el cursor en el buscador y escanea. El producto se
-agrega cuando el lector envía Enter. También puede buscarse manualmente por
-código interno, código de barras, QR, nombre o marca.
+prepara para agregarse cuando el lector envía Enter. Después selecciona la forma
+de pago con `1` (Efectivo), `2` (Transferencia) o `3` (Mercado Libre). También
+puede buscarse manualmente por código interno, código de barras, QR, nombre o
+marca.
+
+De manera predeterminada, cada unidad ocupa una fila independiente y puede tener
+su propia forma de pago. Activa **Venta voluminosa** para agrupar todas las
+unidades iguales en una fila y asignarles una sola forma de pago. Con una fila
+seleccionada, la tecla `D` la elimina. El descuento acepta monto o porcentaje.
 
 ## Respaldo y recuperación
 
