@@ -39,13 +39,20 @@ class ProductDialog(QDialog):
 
         if product:
             self._load_product(product)
+        else:
+            self.codigo.setText(
+                self.product_service.get_next_internal_code()
+            )
 
     def _create_widgets(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
         self.codigo = QLineEdit()
-        self.codigo.setPlaceholderText("Ej. ECH000001")
+        self.codigo.setReadOnly(True)
+        self.codigo.setToolTip(
+            "El código interno se asigna automáticamente al guardar."
+        )
 
         self.codigo_barras = QLineEdit()
         self.codigo_barras.setPlaceholderText(

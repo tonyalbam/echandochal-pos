@@ -57,9 +57,12 @@ Configuración recomendada del lector:
 4. Probar primero en Bloc de notas: debe escribir un solo valor y bajar de línea.
 
 En **Productos** se pueden registrar el código de barras y el QR que ya incluya
-el producto. Ambos valores deben ser únicos. Si el producto no tiene códigos,
-selecciona el registro y usa **Generar etiqueta**; la aplicación generará Code
-128, QR o ambos utilizando el código interno del producto.
+el producto. Ambos valores deben ser únicos. Al dar de alta un producto, el
+código interno se asigna automáticamente con el formato `ECH0000001` y avanza
+al siguiente consecutivo en cada alta; los códigos de productos existentes no
+se modifican. Si el producto no tiene códigos externos, selecciona el registro
+y usa **Generar etiqueta**; la aplicación generará Code 128, QR o ambos
+utilizando el código interno del producto.
 
 En **Nueva venta**, coloca el cursor en el buscador y escanea. El producto se
 prepara para agregarse cuando el lector envía Enter. Después selecciona la forma

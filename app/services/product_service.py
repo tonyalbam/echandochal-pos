@@ -12,6 +12,9 @@ from app.services.configuration_service import ConfigurationService
 class ProductService:
     """Operaciones de negocio relacionadas con productos."""
 
+    INTERNAL_CODE_PREFIX = "ECH"
+    INTERNAL_CODE_DIGITS = 7
+
     ALLOWED_CATEGORIES = (
         "Algodón", "Acrílico", "Combinado", "Clases", "Mercería",
         "Pedidos personalizados", "Talleres", "Patrones",
@@ -148,8 +151,47 @@ class ProductService:
 
         return dict(row) if row else None
 
+    def get_next_internal_code(self) -> str:
+        """Devuelve el siguiente código ECH disponible para un producto nuevo."""
+
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(CAST(SUBSTR(codigo, 4) AS INTEGER)), 0)
+            FROM productos
+            WHERE LENGTH(codigo) = 10
+              AND codigo LIKE 'ECH%'
+              AND SUBSTR(codigo, 4) NOT GLOB '*[^0-9]*'
+            """
+        )
+        sequence = int(cursor.fetchone()[0]) + 1
+        maximum = (10 ** self.INTERNAL_CODE_DIGITS) - 1
+
+        while sequence <= maximum:
+            code = (
+                f"{self.INTERNAL_CODE_PREFIX}"
+                f"{sequence:0{self.INTERNAL_CODE_DIGITS}d}"
+            )
+            cursor.execute(
+                """
+                SELECT 1
+                FROM productos
+                WHERE codigo = ?
+                   OR codigo_barras = ?
+                   OR codigo_qr = ?
+                LIMIT 1
+                """,
+                (code, code, code),
+            )
+            if cursor.fetchone() is None:
+                return code
+            sequence += 1
+
+        raise ValueError("Se agotaron los códigos internos disponibles.")
+
     def create_product(self, data: dict) -> int:
         cursor = self.database.cursor()
+        internal_code = self.get_next_internal_code()
 
         cursor.execute(
             """
@@ -171,7 +213,7 @@ class ProductService:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                data["codigo"],
+                internal_code,
                 data.get("codigo_barras") or None,
                 data.get("codigo_qr") or None,
                 data["nombre"],

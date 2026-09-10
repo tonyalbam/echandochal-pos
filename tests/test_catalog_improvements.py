@@ -46,6 +46,45 @@ class CatalogImprovementsTest(unittest.TestCase):
             list(ProductService.ALLOWED_CATEGORIES),
         )
 
+    def test_internal_product_codes_are_generated_sequentially(self) -> None:
+        service = ProductService(self.database)
+
+        self.assertEqual(service.get_next_internal_code(), "ECH0000001")
+        first_id = service.create_product({
+            "codigo": "CODIGO-MANUAL",
+            "nombre": "Primer producto",
+            "precio": 10,
+        })
+        second_id = service.create_product({
+            "codigo": "OTRO-CODIGO-MANUAL",
+            "nombre": "Segundo producto",
+            "precio": 20,
+        })
+
+        self.assertEqual(service.get_product(first_id)["codigo"], "ECH0000001")
+        self.assertEqual(service.get_product(second_id)["codigo"], "ECH0000002")
+        self.assertEqual(service.get_next_internal_code(), "ECH0000003")
+
+    def test_internal_code_continues_after_existing_ech_products(self) -> None:
+        cursor = self.database.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO productos (codigo, nombre, costo, precio, existencia)
+            VALUES (?, ?, 0, 1, 0)
+            """,
+            (
+                ("CODIGO-ANTERIOR", "Producto anterior"),
+                ("ECH0000012", "Producto automático anterior"),
+                ("ECHINVALIDO", "Código no consecutivo"),
+            ),
+        )
+        self.database.commit()
+
+        self.assertEqual(
+            ProductService(self.database).get_next_internal_code(),
+            "ECH0000013",
+        )
+
     def test_sale_search_matches_code_barcode_name_and_brand(self) -> None:
         cursor = self.database.cursor()
         cursor.execute(
