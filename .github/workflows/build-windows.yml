@@ -1,0 +1,60 @@
+name: Construir instalador de Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Versión del candidato
+        required: true
+        default: 1.0.0-rc1
+  push:
+    branches:
+      - app
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Ejecutar pruebas
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements-build.txt
+          python -m unittest discover -s tests -v
+
+      - name: Preparar creador del instalador
+        shell: pwsh
+        run: |
+          $InnoSetup = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $InnoSetup)) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Construir aplicación e instalador
+        shell: pwsh
+        run: |
+          $Version = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($Version)) {
+            $Version = "1.0.0-rc1"
+          }
+          .\build_windows.ps1 -Version $Version -RequireInstaller
+
+      - name: Publicar candidato instalable
+        uses: actions/upload-artifact@v4
+        with:
+          name: EchandoChalPOS-Windows
+          path: |
+            release\EchandoChalPOS-Setup-*.exe
+            release\EchandoChalPOS-Portable-*.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -8,15 +8,21 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Base de datos local
-data/*.db
-data/*.sqlite
-data/*.sqlite3
+# Compilaciones y entregables
+build/
+dist/
+release/
 
-# Backups locales
-backups/*.db
-backups/*.sqlite
-backups/*.sqlite3
+# Base de datos y respaldos locales
+data/
+backups/*
+!backups/.gitkeep
+
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # Reportes y tickets generados
 reports/*

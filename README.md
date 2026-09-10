@@ -23,26 +23,34 @@ python main.py
 La información se guarda en `data\echandochal.db`. Los respaldos automáticos
 se crean en `backups\automaticos` una vez por día al iniciar el sistema.
 
-## Generar el ejecutable de Windows
+## Generar el ejecutable y el instalador de Windows
 
 Desde PowerShell ejecuta:
 
 ```powershell
-.\build_windows.ps1
+.\build_windows.ps1 -Version "1.0.0-rc1"
 ```
 
-El resultado queda en:
+El script elimina compilaciones anteriores y comprueba que la entrega no
+contenga bases de datos ni respaldos. Los resultados quedan en:
 
 ```text
 dist\EchandoChalPOS\EchandoChalPOS.exe
+release\EchandoChalPOS-Portable-1.0.0-rc1.zip
+release\EchandoChalPOS-Setup-1.0.0-rc1.exe
 ```
 
-Distribuye la carpeta completa `dist\EchandoChalPOS`; el archivo ejecutable no
-debe separarse de la carpeta `_internal`.
+Para crear el instalador se requiere Inno Setup 6. Si no está disponible, el
+script genera la versión portable. En GitHub, el flujo **Construir instalador de
+Windows** produce automáticamente ambos archivos como un artefacto descargable.
 
 Al ejecutar la versión compilada, las carpetas `data` y `backups` se crean junto
 al ejecutable. Se recomienda instalarla en una carpeta con permisos de escritura,
 por ejemplo `C:\EchandoChalPOS`, y no dentro de `Archivos de programa`.
+
+La distribución nunca incluye `data`, `backups` ni archivos SQLite. En una
+instalación nueva, productos, proveedores, compras y ventas comienzan vacíos;
+solo se crean la configuración predeterminada y las categorías necesarias.
 
 ## Escáner de códigos de barras y QR
 
