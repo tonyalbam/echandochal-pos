@@ -1,17 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 datas = [("app/assets", "app/assets")]
 datas += collect_data_files("matplotlib")
+hiddenimports = collect_submodules("reportlab.graphics.barcode")
 
 a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

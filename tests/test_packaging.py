@@ -63,6 +63,14 @@ class PackagingTest(unittest.TestCase):
         self.assertNotIn('(\"data\", \"data\")', spec)
         self.assertNotIn('(\"backups\", \"backups\")', spec)
 
+    def test_reportlab_barcode_modules_are_packaged(self) -> None:
+        spec = Path("echandochal_pos.spec").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'collect_submodules("reportlab.graphics.barcode")', spec
+        )
+        self.assertIn("hiddenimports=hiddenimports", spec)
+
     def test_operational_databases_are_ignored_by_git(self) -> None:
         ignore_rules = Path(".gitignore").read_text(encoding="utf-8")
 
