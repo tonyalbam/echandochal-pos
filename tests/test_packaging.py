@@ -25,7 +25,7 @@ class PackagingTest(unittest.TestCase):
                     self.assertEqual(database.app_root, Path(directory).resolve())
                     self.assertEqual(
                         database.database_path,
-                        Path(directory) / "data" / "echandochal.db",
+                        database.app_root / "data" / "echandochal.db",
                     )
                     self.assertTrue(database.database_path.is_file())
                     for table in ("productos", "proveedores", "ventas", "compras"):
