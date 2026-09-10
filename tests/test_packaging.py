@@ -22,7 +22,7 @@ class PackagingTest(unittest.TestCase):
                 database = Database()
                 try:
                     create_database(database)
-                    self.assertEqual(database.app_root, Path(directory))
+                    self.assertEqual(database.app_root, Path(directory).resolve())
                     self.assertEqual(
                         database.database_path,
                         Path(directory) / "data" / "echandochal.db",
