@@ -60,42 +60,14 @@ class CashClosingService:
 
         cursor.execute(
             """
-            SELECT
-                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
-                COUNT(DISTINCT v.id) AS tickets,
-                COALESCE(SUM(
-                    CASE
-                        WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
-                        THEN v.total * dv.subtotal / v.subtotal
-                        ELSE dv.subtotal - dv.descuento
-                    END
-                ), 0) AS ventas,
-                COALESCE(SUM(
-                    COALESCE(
-                        dv.monto_comision,
-                        CASE WHEN v.subtotal > 0
-                            THEN v.monto_comision * dv.subtotal / v.subtotal
-                            ELSE 0 END
-                    )
-                ), 0) AS comisiones,
-                COALESCE(SUM(
-                    COALESCE(
-                        dv.total_neto,
-                        CASE
-                            WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
-                            THEN v.total * dv.subtotal / v.subtotal
-                            ELSE dv.subtotal - dv.descuento
-                        END
-                        - CASE WHEN v.subtotal > 0
-                            THEN v.monto_comision * dv.subtotal / v.subtotal
-                            ELSE 0 END
-                    )
-                ), 0) AS dinero_neto
-            FROM detalle_venta dv
-            INNER JOIN ventas v ON v.id = dv.venta_id
-            WHERE v.cancelada = 0
-              AND v.fecha = ?
-            GROUP BY COALESCE(dv.metodo_pago, v.metodo_pago)
+            SELECT p.metodo_pago, COUNT(DISTINCT v.id) AS tickets,
+                   ROUND(SUM(p.ventas), 2) AS ventas,
+                   ROUND(SUM(p.comisiones), 2) AS comisiones,
+                   ROUND(SUM(p.ventas - p.comisiones), 2) AS dinero_neto
+            FROM resumen_pagos_venta p
+            JOIN ventas v ON v.id = p.venta_id
+            WHERE v.cancelada = 0 AND v.fecha = ?
+            GROUP BY p.metodo_pago
             """,
             (closing_date,),
         )
