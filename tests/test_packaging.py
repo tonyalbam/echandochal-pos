@@ -13,21 +13,26 @@ from tools.verify_clean_distribution import (
 
 
 class PackagingTest(unittest.TestCase):
-    def test_frozen_application_stores_data_next_to_executable(self) -> None:
+    def test_frozen_application_uses_configured_external_database(self) -> None:
+        from app.database.data_location import save_data_directory
+        from app.database.data_migration import initialize_new_database
+
         with tempfile.TemporaryDirectory() as directory:
-            executable = Path(directory) / "EchandoChalPOS.exe"
+            root = Path(directory)
+            install = root / "installation"
+            install.mkdir()
+            executable = install / "EchandoChalPOS.exe"
+            external = root / "external-data"
+            config = root / "settings" / "data-location.json"
             with patch.object(sys, "frozen", True, create=True), patch.object(
                 sys, "executable", str(executable)
-            ):
+            ), patch("app.database.data_location.configuration_file", return_value=config):
+                initialize_new_database(external)
                 database = Database()
                 try:
-                    create_database(database)
-                    self.assertEqual(database.app_root, Path(directory).resolve())
-                    self.assertEqual(
-                        database.database_path,
-                        database.app_root / "data" / "echandochal.db",
-                    )
-                    self.assertTrue(database.database_path.is_file())
+                    self.assertEqual(database.app_root, install.resolve())
+                    self.assertEqual(database.database_path, external.resolve() / "echandochal.db")
+                    self.assertFalse((install / "data" / "echandochal.db").exists())
                     for table in ("productos", "proveedores", "ventas", "compras"):
                         count = database.connection.execute(
                             f"SELECT COUNT(*) FROM {table}"
@@ -39,6 +44,20 @@ class PackagingTest(unittest.TestCase):
                     self.assertEqual(category_count, 8)
                 finally:
                     database.close()
+
+    def test_frozen_application_refuses_missing_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            install = root / "installation"
+            install.mkdir()
+            executable = install / "EchandoChalPOS.exe"
+            config = root / "settings" / "data-location.json"
+            with patch.object(sys, "frozen", True, create=True), patch.object(
+                sys, "executable", str(executable)
+            ), patch("app.database.data_location.configuration_file", return_value=config):
+                with self.assertRaises(FileNotFoundError):
+                    Database()
+                self.assertFalse((install / "data" / "echandochal.db").exists())
 
     def test_distribution_audit_rejects_operational_data(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
