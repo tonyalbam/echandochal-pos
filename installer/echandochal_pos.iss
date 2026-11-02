@@ -48,6 +48,11 @@ Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; Gr
 [Files]
 Source: "..\dist\EchandoChalPOS\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+#ifdef SandboxBuild
+[INI]
+Filename: "{app}\sandbox-mode.ini"; Section: "Mode"; Key: "Sandbox"; String: "1"
+#endif
+
 [Icons]
 #ifdef SandboxBuild
 Name: "{autoprograms}\Echando Chal POS (PRUEBAS)"; Filename: "{app}\EchandoChalPOS.exe"; WorkingDir: "{app}"
