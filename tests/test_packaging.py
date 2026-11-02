@@ -98,6 +98,15 @@ class PackagingTest(unittest.TestCase):
         self.assertIn("DirExists(ExpandConstant('{app}\\backups'))", installer)
         self.assertIn("la instalación se ha detenido", installer)
 
+    def test_sandbox_installer_is_isolated_and_does_not_autolaunch(self) -> None:
+        installer = Path("installer/echandochal_pos.iss").read_text(encoding="utf-8")
+        self.assertIn("#ifdef SandboxBuild", installer)
+        self.assertIn("AppId={{6AC076C2-1A66-463C-995D-9600B43D4F54}", installer)
+        self.assertIn("AppId={{73C9AB99-2794-4384-BCA5-D2EEB61E63EF}", installer)
+        self.assertIn(r"DefaultDirName={localappdata}\Programs\EchandoChalPOS-Sandbox", installer)
+        self.assertIn("OutputBaseFilename=EchandoChalPOS-SANDBOX-", installer)
+        self.assertIn('[Run]\n#ifndef SandboxBuild', installer)
+
     def test_operational_databases_are_ignored_by_git(self) -> None:
         ignore_rules = Path(".gitignore").read_text(encoding="utf-8")
 
