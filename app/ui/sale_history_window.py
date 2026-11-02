@@ -73,32 +73,21 @@ class SaleDetailDialog(QDialog):
             )
 
         layout.addWidget(informacion)
-        if sale.get("payments"):
-            breakdown = " | ".join(
-                f"{row['metodo_pago']}: $ {row['monto']:,.2f}"
-                for row in sale["payments"]
-            )
-            payments_info = QLabel("Pagos de la venta: " + breakdown)
-            payments_info.setWordWrap(True)
-            layout.addWidget(payments_info)
+        has_sale_payments = bool(sale.get("payments"))
+        productos_titulo = QLabel("Productos vendidos")
+        productos_titulo.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(productos_titulo)
 
         tabla = QTableWidget(
             len(sale["items"]),
-            7,
+            5 if has_sale_payments else 7,
         )
-
-        tabla.setHorizontalHeaderLabels(
-            [
-                "Código",
-                "Producto",
-                "Cantidad",
-                "Precio",
-                "Importe",
-                "Forma de pago",
-                "Comisión",
-            ]
-        )
-
+        product_headers = [
+            "Código", "Producto", "Cantidad", "Precio", "Importe"
+        ]
+        if not has_sale_payments:
+            product_headers += ["Forma de pago", "Comisión"]
+        tabla.setHorizontalHeaderLabels(product_headers)
         tabla.horizontalHeader().setSectionResizeMode(
             1,
             QHeaderView.ResizeMode.Stretch,
@@ -151,15 +140,50 @@ class SaleDetailDialog(QDialog):
                 ),
             )
 
-            tabla.setItem(
-                row, 5, QTableWidgetItem(item["metodo_pago"])
-            )
-            tabla.setItem(
-                row, 6,
-                QTableWidgetItem(f"$ {item['monto_comision']:,.2f}"),
-            )
+            if not has_sale_payments:
+                tabla.setItem(
+                    row, 5, QTableWidgetItem(item["metodo_pago"])
+                )
+                tabla.setItem(
+                    row, 6,
+                    QTableWidgetItem(f"$ {item['monto_comision']:,.2f}"),
+                )
 
         layout.addWidget(tabla)
+
+        if has_sale_payments:
+            pagos_titulo = QLabel("Cómo se pagó la venta")
+            pagos_titulo.setStyleSheet("font-size: 16px; font-weight: bold;")
+            layout.addWidget(pagos_titulo)
+            pagos_tabla = QTableWidget(len(sale["payments"]), 3)
+            pagos_tabla.setHorizontalHeaderLabels(
+                ["Forma de pago", "Importe cobrado", "Comisión"]
+            )
+            pagos_tabla.setEditTriggers(
+                QTableWidget.EditTrigger.NoEditTriggers
+            )
+            pagos_tabla.verticalHeader().setVisible(False)
+            pagos_tabla.horizontalHeader().setSectionResizeMode(
+                0, QHeaderView.ResizeMode.Stretch
+            )
+            pagos_tabla.setMaximumHeight(
+                pagos_tabla.horizontalHeader().height()
+                + sum(pagos_tabla.rowHeight(i) for i in range(pagos_tabla.rowCount()))
+                + 8
+            )
+            for index, payment in enumerate(sale["payments"]):
+                pagos_tabla.setItem(
+                    index, 0, QTableWidgetItem(payment["metodo_pago"])
+                )
+                pagos_tabla.setItem(
+                    index, 1,
+                    QTableWidgetItem(f"$ {payment['monto']:,.2f}"),
+                )
+                pagos_tabla.setItem(
+                    index, 2,
+                    QTableWidgetItem(f"$ {payment['monto_comision']:,.2f}"),
+                )
+            layout.addWidget(pagos_tabla)
 
         resumen = QLabel(
             f"Subtotal: $ {sale['subtotal']:,.2f}\n"
