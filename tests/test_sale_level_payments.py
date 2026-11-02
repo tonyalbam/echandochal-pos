@@ -1,4 +1,7 @@
 import sqlite3
+import tempfile
+from pathlib import Path
+from openpyxl import load_workbook
 import unittest
 from unittest.mock import patch
 
@@ -77,6 +80,20 @@ class SaleLevelPaymentTest(unittest.TestCase):
         annual = ReportService(self.db).get_annual_financial_report(2026)
         self.assertEqual([p["ventas"] for p in annual["formas_pago"]], [50, 100, 200])
         self.assertEqual(annual["comisiones"], 8)
+        with tempfile.TemporaryDirectory() as temp:
+            path = SaleHistoryService(self.db).export_sales_report(
+                Path(temp) / "historial.xlsx"
+            )
+            workbook = load_workbook(path, data_only=True)
+            self.assertEqual(workbook["Productos vendidos"]["J2"].value, "Por venta")
+            self.assertEqual(workbook["Productos vendidos"]["L2"].value, 0)
+            payments_sheet = workbook["Pagos por venta"]
+            self.assertEqual(
+                [payments_sheet[f"D{row}"].value for row in (2, 3, 4)],
+                [50, 100, 200],
+            )
+            self.assertEqual(payments_sheet["E4"].value, 8)
+            workbook.close()
 
     def test_invalid_payment_does_not_create_sale(self):
         with self.assertRaises(ValueError):
