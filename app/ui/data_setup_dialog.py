@@ -34,16 +34,23 @@ class DataSetupDialog(QDialog):
         self.fresh = QRadioButton("Crear una base nueva (solo primera instalación)")
         layout.addWidget(self.migrate)
         layout.addWidget(self.fresh)
+        source_row = QHBoxLayout()
+        self.source_path = QLineEdit()
+        self.source_path.setPlaceholderText("Seleccione echandochal.db de su instalación anterior")
+        self.source_path.setReadOnly(True)
+        source_row.addWidget(self.source_path)
+        source_button = QPushButton("Buscar base anterior...")
+        source_button.clicked.connect(self.browse_source)
+        source_row.addWidget(source_button)
+        layout.addLayout(source_row)
         if legacy_database and legacy_database.is_file():
-            self.migrate.setChecked(True)
-            layout.addWidget(QLabel(f"Base existente detectada:\n{legacy_database}"))
+            self.source_path.setText(str(legacy_database))
         else:
-            self.migrate.setEnabled(False)
-            self.fresh.setChecked(True)
             layout.addWidget(QLabel(
-                "No se detectó una base anterior en esta instalación.\n"
-                "Si ya utilizaba el sistema, cancele y localice su base antes de continuar."
+                "No se detectó una base anterior. Si ya utilizaba el sistema, "
+                "busque echandochal.db antes de continuar."
             ))
+        self.migrate.setChecked(True)
         actions = QHBoxLayout()
         cancel = QPushButton("Cancelar")
         cancel.clicked.connect(self.reject)
@@ -58,19 +65,32 @@ class DataSetupDialog(QDialog):
         if folder:
             self.folder.setText(folder)
 
+    def browse_source(self):
+        source, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar base de datos anterior", "",
+            "Base Echando Chal (echandochal.db)"
+        )
+        if source:
+            if Path(source).name.lower() != "echandochal.db":
+                QMessageBox.warning(self, "Archivo inválido", "Seleccione el archivo echandochal.db.")
+                return
+            self.source_path.setText(source)
+            self.migrate.setChecked(True)
+
     def apply(self):
         try:
             folder = validate_data_directory(self.folder.text().strip())
             if self.migrate.isChecked():
-                if not self.legacy_database:
-                    raise RuntimeError("No se detectó una base para migrar.")
+                source = Path(self.source_path.text().strip())
+                if source.name.lower() != "echandochal.db" or not source.is_file():
+                    raise RuntimeError("Seleccione una base anterior válida llamada echandochal.db.")
                 if QMessageBox.question(
                     self, "Confirmar migración",
                     "Se copiará la base existente a la carpeta elegida.\n"
                     "El original se conservará sin modificaciones. ¿Continuar?"
                 ) != QMessageBox.StandardButton.Yes:
                     return
-                migrate_existing_database(self.legacy_database, folder)
+                migrate_existing_database(source, folder)
             else:
                 if QMessageBox.question(
                     self, "Confirmar base nueva",
