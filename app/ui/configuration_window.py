@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 import sqlite3
 
 from PySide6.QtCore import Signal
@@ -145,12 +146,16 @@ class ConfigurationWindow(QWidget):
 
     def _create_backup(self) -> None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        suggested_name = f"echandochal_respaldo_{timestamp}.db"
+        suggested_name = (
+            Path(self.backup_service.database.data_directory)
+            / "backups"
+            / f"echandochal_respaldo_{timestamp}.db"
+        )
 
         destination, _ = QFileDialog.getSaveFileName(
             self,
             "Crear respaldo de la base de datos",
-            suggested_name,
+            str(suggested_name),
             "Base de datos SQLite (*.db)",
         )
 
