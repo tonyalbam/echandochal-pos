@@ -10,7 +10,7 @@ from app.services.cash_closing_service import CashClosingService
 from app.services.report_service import ReportService
 
 
-class TestDatabase:
+class MemoryDatabase:
     def __init__(self):
         self.connection = sqlite3.connect(":memory:")
         self.connection.row_factory = sqlite3.Row
@@ -41,7 +41,7 @@ class FakeDateTime:
 
 class SaleLevelPaymentTest(unittest.TestCase):
     def setUp(self):
-        self.db = TestDatabase()
+        self.db = MemoryDatabase()
 
     def tearDown(self):
         self.db.connection.close()
