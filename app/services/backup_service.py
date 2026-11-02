@@ -56,7 +56,7 @@ class BackupService:
                 raise ValueError(
                     "No fue posible determinar la carpeta de respaldos."
                 )
-            directory = Path(app_root) / "backups" / "automaticos"
+            directory = Path(self.database.data_directory) / "backups" / "automaticos"
 
         backup_directory = Path(directory)
         backup_path = backup_directory / (
@@ -183,7 +183,7 @@ class BackupService:
             if app_root is None:
                 safety_directory = source_path.parent
             else:
-                safety_directory = Path(app_root) / "backups"
+                safety_directory = Path(self.database.data_directory) / "backups"
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         safety_path = Path(safety_directory) / (
