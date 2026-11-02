@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -58,7 +59,7 @@ def save_data_directory(folder: str | Path, config_path: Path | None = None) -> 
     database = directory / DB_NAME
     if not database.is_file():
         raise FileNotFoundError(f"No existe una base de datos en: {database}")
-    with sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise RuntimeError("La base no superó la validación de integridad.")
         tables = {r[0] for r in conn.execute(
