@@ -38,49 +38,97 @@ class ClearOnFocusLineEdit(QLineEdit):
         super().focusInEvent(event)
 
 
-class PaymentMethodDialog(QDialog):
-    """Selector de pago operable con una sola tecla."""
+class SalePaymentDialog(QDialog):
+    """Captura los pagos de toda la venta y calcula el cambio."""
 
-    METHODS = {
-        Qt.Key.Key_1: "Efectivo",
-        Qt.Key.Key_2: "Transferencia",
-        Qt.Key.Key_3: "Mercado Libre",
-    }
-
-    def __init__(self, product_name: str, parent=None) -> None:
+    def __init__(self, total: float, commission_rate: float, parent=None):
         super().__init__(parent)
-        self.payment_method: str | None = None
-        self.setWindowTitle("Forma de pago")
-        self.setModal(True)
-        self.setMinimumWidth(360)
-
+        from app.services.payment_allocation import calculate_payment
+        self.calculate_payment = calculate_payment
+        self.total = round(total, 2)
+        self.commission_rate = commission_rate
+        self.result = None
+        self.setWindowTitle("Cobrar venta")
+        self.setMinimumWidth(430)
         layout = QVBoxLayout(self)
-        title = QLabel(f"Forma de pago para:\n{product_name}")
-        title.setStyleSheet("font-size: 16px; font-weight: bold;")
-        title.setWordWrap(True)
+        title = QLabel(f"Total a cobrar: $ {self.total:,.2f}")
+        title.setStyleSheet("font-size: 22px; font-weight: bold;")
         layout.addWidget(title)
-
         help_text = QLabel(
-            "Presiona una tecla, sin escribir en ningún campo:\n\n"
-            "1  -  Efectivo\n"
-            "2  -  Transferencia\n"
-            "3  -  Mercado Libre"
+            "Distribuye el total entre efectivo, transferencia y tarjeta. "
+            "El efectivo recibido puede ser mayor que el importe en efectivo."
         )
-        help_text.setStyleSheet("font-size: 15px;")
+        help_text.setWordWrap(True)
         layout.addWidget(help_text)
-
+        self.amounts = {}
+        for name in SaleService.PAYMENT_METHODS:
+            row = QHBoxLayout()
+            row.addWidget(QLabel("Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name))
+            field = QDoubleSpinBox()
+            field.setDecimals(2)
+            field.setRange(0, 99999999.99)
+            field.setPrefix("$ ")
+            field.setMinimumHeight(38)
+            field.valueChanged.connect(self._update)
+            row.addWidget(field)
+            self.amounts[name] = field
+            layout.addLayout(row)
+        self.amounts["Efectivo"].setValue(self.total)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Efectivo recibido"))
+        self.cash_received = QDoubleSpinBox()
+        self.cash_received.setDecimals(2)
+        self.cash_received.setRange(0, 99999999.99)
+        self.cash_received.setPrefix("$ ")
+        self.cash_received.valueChanged.connect(self._update)
+        row.addWidget(self.cash_received)
+        layout.addLayout(row)
+        self.cash_received.setValue(self.total)
+        self.remaining_label = QLabel()
+        self.change_label = QLabel()
+        self.change_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        self.commission_label = QLabel()
+        for widget in (self.remaining_label, self.change_label, self.commission_label):
+            layout.addWidget(widget)
+        controls = QHBoxLayout()
         cancel = QPushButton("Cancelar")
-        cancel.setMinimumHeight(38)
         cancel.clicked.connect(self.reject)
-        layout.addWidget(cancel)
+        self.confirm = QPushButton("Confirmar cobro")
+        self.confirm.clicked.connect(self._accept)
+        controls.addWidget(cancel)
+        controls.addWidget(self.confirm)
+        layout.addLayout(controls)
+        self._update()
 
-    def keyPressEvent(self, event) -> None:
-        method = self.METHODS.get(event.key())
-        if method is not None:
-            self.payment_method = method
-            self.accept()
+    def _update(self):
+        from app.services.payment_allocation import cents
+        amount_cents = sum(cents(field.value()) for field in self.amounts.values())
+        remaining = cents(self.total) - amount_cents
+        received = cents(self.cash_received.value())
+        cash = cents(self.amounts["Efectivo"].value())
+        self.remaining_label.setText(
+            f"{'Falta cobrar' if remaining >= 0 else 'Excede el total'}: "
+            f"$ {abs(remaining) / 100:,.2f}"
+        )
+        self.change_label.setText(f"Cambio: $ {max(0, received - cash) / 100:,.2f}")
+        card = self.amounts["Mercado Libre"].value()
+        self.commission_label.setText(
+            f"Comisión estimada de tarjeta ({self.commission_rate:g}%): "
+            f"$ {round(card * self.commission_rate / 100, 2):,.2f}"
+        )
+        self.confirm.setEnabled(remaining == 0 and received >= cash)
+
+    def _accept(self):
+        payments = {name: field.value() for name, field in self.amounts.items()}
+        try:
+            self.result = self.calculate_payment(
+                self.total, payments, self.cash_received.value(),
+                self.commission_rate,
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Cobro inválido", str(exc))
             return
-        super().keyPressEvent(event)
+        self.accept()
 
 
 class SaleItemsTable(QTableWidget):
@@ -180,7 +228,7 @@ class SaleWindow(QWidget):
             self._cambiar_modo_volumen
         )
         mode_help = QLabel(
-            "Desactivada: cada unidad se muestra y cobra por separado."
+            "Desactivada: cada unidad se muestra por separado."
         )
         mode_help.setStyleSheet("color: #94A3B8;")
         mode_layout.addWidget(self.venta_voluminosa)
@@ -188,7 +236,7 @@ class SaleWindow(QWidget):
         mode_layout.addStretch()
         layout.addLayout(mode_layout)
 
-        self.tabla = SaleItemsTable(0, 10)
+        self.tabla = SaleItemsTable(0, 9)
 
         self.tabla.setHorizontalHeaderLabels(
             [
@@ -200,7 +248,6 @@ class SaleWindow(QWidget):
                 "Cantidad",
                 "Precio",
                 "Importe",
-                "Forma de pago",
                 "",
             ]
         )
@@ -222,7 +269,7 @@ class SaleWindow(QWidget):
         )
 
         self.tabla.horizontalHeader().setSectionResizeMode(
-            9,
+            8,
             QHeaderView.ResizeMode.ResizeToContents,
         )
 
@@ -389,7 +436,7 @@ class SaleWindow(QWidget):
 
             return
 
-        self._seleccionar_pago_y_agregar(producto)
+        self._agregar_producto(producto)
 
     def _actualizar_sugerencias(self, text: str) -> None:
         products = self.service.search_products(text)
@@ -411,24 +458,13 @@ class SaleWindow(QWidget):
             # La bandera evita procesar esa misma pulsación por segunda vez y
             # se restablece al terminar el evento, para no ignorar otro escaneo.
             self.ignore_next_return = True
-            self._seleccionar_pago_y_agregar(product)
+            self._agregar_producto(product)
             QTimer.singleShot(0, self._reset_return_guard)
 
     def _reset_return_guard(self) -> None:
         self.ignore_next_return = False
 
-    def _seleccionar_pago_y_agregar(self, producto: dict) -> None:
-        self.codigo_input.clear()
-        if not self._hay_inventario_disponible(producto):
-            self._mostrar_sin_inventario()
-            self.codigo_input.setFocus()
-            return
-        dialog = PaymentMethodDialog(producto["nombre"], self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._agregar_producto(producto, dialog.payment_method)
-        self.codigo_input.setFocus()
-
-    def _agregar_producto(self, producto: dict, payment_method: str) -> None:
+    def _agregar_producto(self, producto: dict) -> None:
         if not self._hay_inventario_disponible(producto):
             self._mostrar_sin_inventario()
             self.codigo_input.setFocus()
@@ -438,7 +474,6 @@ class SaleWindow(QWidget):
             for item in self.items:
                 if item["producto_id"] == producto["id"]:
                     item["cantidad"] = float(item["cantidad"]) + 1
-                    item["metodo_pago"] = payment_method
                     self._refrescar_tabla()
                     self.codigo_input.setFocus()
                     return
@@ -458,7 +493,6 @@ class SaleWindow(QWidget):
                 "existencia": float(
                     producto["existencia"]
                 ),
-                "metodo_pago": payment_method,
             }
         )
 
@@ -481,15 +515,7 @@ class SaleWindow(QWidget):
 
     def _cambiar_modo_volumen(self, checked: bool) -> None:
         if checked:
-            self.items, had_mixed_payments = group_sale_items(self.items)
-            if had_mixed_payments:
-                QMessageBox.information(
-                    self,
-                    "Forma de pago agrupada",
-                    "Al agrupar se conservó para todas las unidades la forma "
-                    "de pago de la primera fila de cada producto. Puedes "
-                    "cambiarla en el grid.",
-                )
+            self.items, _ = group_sale_items(self.items)
         else:
             self.items = expand_sale_items(self.items)
         self._refrescar_tabla()
@@ -565,15 +591,6 @@ class SaleWindow(QWidget):
                 ),
             )
 
-            payment = QComboBox()
-            payment.addItems(SaleService.PAYMENT_METHODS)
-            payment.setCurrentText(item["metodo_pago"])
-            payment.currentTextChanged.connect(
-                lambda method, index=row:
-                self._cambiar_metodo_pago(index, method)
-            )
-            self.tabla.setCellWidget(row, 8, payment)
-
             quitar = QPushButton("Quitar")
 
             quitar.clicked.connect(
@@ -583,16 +600,11 @@ class SaleWindow(QWidget):
 
             self.tabla.setCellWidget(
                 row,
-                9,
+                8,
                 quitar,
             )
 
         self._actualizar_totales()
-
-    def _cambiar_metodo_pago(self, index: int, method: str) -> None:
-        if 0 <= index < len(self.items):
-            self.items[index]["metodo_pago"] = method
-            self._actualizar_totales()
 
     def _quitar_item(
         self,
@@ -638,37 +650,13 @@ class SaleWindow(QWidget):
             subtotal - descuento,
         )
 
-        tasa = self.service.get_commission_rate()
-        ml_subtotal = sum(
-            item["cantidad"] * item["precio_unitario"]
-            for item in self.items
-            if item["metodo_pago"] == "Mercado Libre"
-        )
-        ml_total = (
-            total * ml_subtotal / subtotal
-            if subtotal > 0 else 0.0
-        )
-        comision = round(ml_total * tasa / 100, 2)
-
-        neto = total - comision
+        neto = total
 
         self.subtotal_label.setText(
             f"Subtotal:  $ {subtotal:,.2f}"
         )
 
-        if ml_subtotal:
-            self.comision_label.setText(
-                (
-                    "Comisión Mercado Libre "
-                    f"({tasa:g}%):  "
-                    f"$ {comision:,.2f}"
-                )
-            )
-
-        else:
-            self.comision_label.setText(
-                "Comisión:  $ 0.00"
-            )
+        self.comision_label.setText("Comisión de tarjeta: se calcula al cobrar")
 
         self.total_label.setText(
             f"TOTAL A COBRAR:  $ {total:,.2f}"
@@ -742,35 +730,14 @@ class SaleWindow(QWidget):
 
         total = subtotal - descuento
 
-        payment_summary = []
-        for method in SaleService.PAYMENT_METHODS:
-            amount = sum(
-                item["cantidad"] * item["precio_unitario"]
-                for item in self.items
-                if item["metodo_pago"] == method
-            )
-            if amount:
-                paid_amount = amount * total / subtotal if subtotal else 0.0
-                payment_summary.append(f"{method}: $ {paid_amount:,.2f}")
-
-        confirmacion = QMessageBox.question(
-            self,
-            "Confirmar venta",
-            (
-                f"¿Confirmar venta por "
-                f"$ {total:,.2f}?\n\n"
-                "Formas de pago:\n"
-                + "\n".join(payment_summary)
-            ),
-            QMessageBox.StandardButton.Yes
-            | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-
-        if (
-            confirmacion
-            != QMessageBox.StandardButton.Yes
-        ):
+        if total <= 0:
+            QMessageBox.warning(self, "Total inválido", "La venta debe ser mayor que cero.")
+            return
+        dialog = SalePaymentDialog(total, self.service.get_commission_rate(), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        payment_info = dialog.result
+        if payment_info is None:
             return
 
         try:
@@ -778,6 +745,8 @@ class SaleWindow(QWidget):
             venta = self.service.create_sale(
                 items=self.items,
                 discount=descuento,
+                payments=payment_info["payments"],
+                cash_received=payment_info["cash_received"],
             )
 
         except (
@@ -814,6 +783,8 @@ class SaleWindow(QWidget):
             "Forma de pago: "
             f"{venta['metodo_pago']}\n"
         )
+
+        mensaje += f"Cambio para el cliente: $ {venta['change']:,.2f}\\n"
 
         if venta["monto_comision"] > 0:
             mensaje += (
