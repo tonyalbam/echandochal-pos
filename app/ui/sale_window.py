@@ -784,7 +784,7 @@ class SaleWindow(QWidget):
             f"{venta['metodo_pago']}\n"
         )
 
-        mensaje += f"Cambio para el cliente: $ {venta['change']:,.2f}\\n"
+        mensaje += f"Cambio para el cliente: $ {venta['change']:,.2f}\n"
 
         if venta["monto_comision"] > 0:
             mensaje += (
