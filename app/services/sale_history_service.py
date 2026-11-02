@@ -253,6 +253,7 @@ class SaleHistoryService:
         sales_sheet = workbook.active
         sales_sheet.title = "Ventas"
         items_sheet = workbook.create_sheet("Productos vendidos")
+        payments_sheet = workbook.create_sheet("Pagos por venta")
 
         title_fill = PatternFill("solid", fgColor="1F4E78")
         header_fill = PatternFill("solid", fgColor="D9EAF7")
@@ -300,6 +301,16 @@ class SaleHistoryService:
             cell.font = white_bold_font
             cell.alignment = Alignment(horizontal="center")
 
+        payment_headers = (
+            "Folio", "Fecha", "Forma de pago", "Importe cobrado",
+            "Comisión", "Ingreso neto", "Estado",
+        )
+        for column, header in enumerate(payment_headers, start=1):
+            cell = payments_sheet.cell(row=1, column=column, value=header)
+            cell.fill = title_fill
+            cell.font = white_bold_font
+            cell.alignment = Alignment(horizontal="center")
+        payment_row = 2
         item_row = 2
         for sales_row, sale in enumerate(sales, start=6):
             detail = self.get_sale(int(sale["id"]))
@@ -320,6 +331,23 @@ class SaleHistoryService:
                     cell.number_format = money_format
                 elif column == 8:
                     cell.number_format = "0.00%"
+
+            if detail:
+                for payment in detail["payments"]:
+                    payment_values = (
+                        sale["folio"], sale["fecha"],
+                        payment["metodo_pago"], payment["monto"],
+                        payment["monto_comision"],
+                        round(payment["monto"] - payment["monto_comision"], 2),
+                        status,
+                    )
+                    for column, value in enumerate(payment_values, start=1):
+                        cell = payments_sheet.cell(
+                            row=payment_row, column=column, value=value
+                        )
+                        if column in (4, 5, 6):
+                            cell.number_format = money_format
+                    payment_row += 1
 
             for item in items:
                 item_values = (
@@ -358,6 +386,11 @@ class SaleHistoryService:
         if sales:
             sales_sheet.auto_filter.ref = f"A5:L{total_row - 1}"
         items_sheet.freeze_panes = "A2"
+        payments_sheet.freeze_panes = "A2"
+        if payment_row > 2:
+            payments_sheet.auto_filter.ref = f"A1:G{payment_row - 1}"
+        for column, width in enumerate((23, 14, 23, 18, 16, 18, 14), start=1):
+            payments_sheet.column_dimensions[get_column_letter(column)].width = width
         if item_row > 2:
             items_sheet.auto_filter.ref = f"A1:N{item_row - 1}"
 
