@@ -76,16 +76,41 @@ def test_migrate_existing_database_preserves_source(tmp_path, monkeypatch):
 
 
 def test_migration_refuses_to_overwrite_existing_database(tmp_path, monkeypatch):
+    import app.database.data_location as locations
     import app.database.data_migration as migration
     install = tmp_path / "program"
     install.mkdir()
-    monkeypatch.setattr(migration, "validate_data_directory", lambda p: Path(p))
+    monkeypatch.setattr(locations, "installation_directory", lambda: install)
+    monkeypatch.setattr(migration, "validate_data_directory",
+                        lambda p: locations.validate_data_directory(p, install_dir=install))
     source = tmp_path / "source.db"
-    source.write_bytes(b"source")
+    with sqlite3.connect(source) as conn:
+        for name in ("configuracion", "productos", "ventas", "detalle_venta",
+                     "compras", "proveedores"):
+            conn.execute(f"CREATE TABLE {name} (id INTEGER)")
+        conn.execute("INSERT INTO productos VALUES (123)")
     folder = tmp_path / "data"
     folder.mkdir()
     existing = folder / "echandochal.db"
     existing.write_bytes(b"keep")
-    with pytest.raises(Exception):
+    with pytest.raises(FileExistsError):
         migration.migrate_existing_database(source, folder)
     assert existing.read_bytes() == b"keep"
+    assert migration.inspect_database(source)["productos"] == 1
+
+
+def test_migration_rejects_invalid_source_without_creating_destination(tmp_path, monkeypatch):
+    import app.database.data_location as locations
+    import app.database.data_migration as migration
+    install = tmp_path / "program"
+    install.mkdir()
+    monkeypatch.setattr(locations, "installation_directory", lambda: install)
+    monkeypatch.setattr(migration, "validate_data_directory",
+                        lambda p: locations.validate_data_directory(p, install_dir=install))
+    source = tmp_path / "echandochal.db"
+    source.write_bytes(b"not a sqlite database")
+    folder = tmp_path / "target"
+    with pytest.raises(sqlite3.DatabaseError):
+        migration.migrate_existing_database(source, folder)
+    assert source.read_bytes() == b"not a sqlite database"
+    assert not (folder / "echandochal.db").exists()
