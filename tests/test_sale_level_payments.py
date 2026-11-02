@@ -64,6 +64,10 @@ class SaleLevelPaymentTest(unittest.TestCase):
         result = SaleHistoryService(self.db).get_sale(sale["id"])
         self.assertEqual(sum(p["monto"] for p in result["payments"]), 350)
         self.assertEqual(result["items"][0]["metodo_pago"], "Por venta")
+        self.assertEqual(result["items"][0]["monto_comision"], 0)
+        self.assertEqual(result["items"][0]["porcentaje_comision"], 0)
+        self.assertEqual(result["items"][0]["total_neto"], 350)
+        self.assertEqual(sum(p["monto_comision"] for p in result["payments"]), 8)
         dashboard = DashboardService(self.db).get_payment_sales_for_period("2026-11")
         self.assertEqual(dashboard, {
             "Efectivo": 50, "Transferencia": 100, "Mercado Libre": 200
