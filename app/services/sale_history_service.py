@@ -202,6 +202,11 @@ class SaleHistoryService:
             (sale_id,),
         )
 
+        cursor.execute("""
+            SELECT metodo_pago, monto, monto_comision
+            FROM pagos_venta WHERE venta_id = ? ORDER BY id
+        """, (sale_id,))
+        sale["payments"] = [dict(payment) for payment in cursor.fetchall()]
         sale["items"] = [
             dict(item)
             for item in cursor.fetchall()
