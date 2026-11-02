@@ -73,7 +73,6 @@ class SalePaymentDialog(QDialog):
             row.addWidget(field)
             self.amounts[name] = field
             layout.addLayout(row)
-        self.amounts["Efectivo"].setValue(self.total)
         row = QHBoxLayout()
         row.addWidget(QLabel("Efectivo recibido"))
         self.cash_received = QDoubleSpinBox()
@@ -83,7 +82,6 @@ class SalePaymentDialog(QDialog):
         self.cash_received.valueChanged.connect(self._update)
         row.addWidget(self.cash_received)
         layout.addLayout(row)
-        self.cash_received.setValue(self.total)
         self.remaining_label = QLabel()
         self.change_label = QLabel()
         self.change_label.setStyleSheet("font-size: 18px; font-weight: bold;")
@@ -98,6 +96,8 @@ class SalePaymentDialog(QDialog):
         controls.addWidget(cancel)
         controls.addWidget(self.confirm)
         layout.addLayout(controls)
+        self.amounts["Efectivo"].setValue(self.total)
+        self.cash_received.setValue(self.total)
         self._update()
 
     def _update(self):
