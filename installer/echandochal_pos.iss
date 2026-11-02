@@ -82,8 +82,7 @@ begin
     Result :=
       'Se detectaron datos o respaldos de una instalación anterior ' +
       'dentro de la carpeta del programa.' + #13#10 + #13#10 +
-      'Por seguridad, la instalación se ha detenido sin modificar esos archivos.' +
-      #13#10 + #13#10 +
+      'Por seguridad, la instalación se ha detenido sin modificar esos archivos.' + #13#10 + #13#10 +
       'Primero migre la base de datos a una carpeta externa y confirme ' +
       'que tiene un respaldo válido. Después vuelva a ejecutar el instalador.';
   end;
