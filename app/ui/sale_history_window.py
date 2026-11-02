@@ -40,7 +40,7 @@ class SaleDetailDialog(QDialog):
             f"Venta {sale['folio']}"
         )
 
-        self.resize(850, 500)
+        self.resize(850, 630 if sale.get("payments") else 500)
 
         layout = QVBoxLayout(self)
 
