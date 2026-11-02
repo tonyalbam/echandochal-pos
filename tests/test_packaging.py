@@ -107,6 +107,29 @@ class PackagingTest(unittest.TestCase):
         self.assertIn("OutputBaseFilename=EchandoChalPOS-SANDBOX-", installer)
         self.assertIn('[Run]\n#ifndef SandboxBuild', installer)
 
+    def test_sandbox_configuration_uses_separate_localappdata(self) -> None:
+        from app.database.data_location import configuration_file
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            install = root / "sandbox-install"
+            install.mkdir()
+            executable = install / "EchandoChalPOS.exe"
+            (install / "sandbox-mode.ini").write_text("[Mode]\\nSandbox=1\\n", encoding="utf-8")
+            with patch.object(sys, "frozen", True, create=True), patch.object(
+                sys, "executable", str(executable)
+            ), patch.dict("os.environ", {"LOCALAPPDATA": str(root / "profile")}):
+                sandbox_config = configuration_file()
+                self.assertEqual(sandbox_config.parent.name, "EchandoChalPOS-Sandbox")
+                (install / "sandbox-mode.ini").unlink()
+                normal_config = configuration_file()
+                self.assertEqual(normal_config.parent.name, "EchandoChalPOS")
+                self.assertNotEqual(sandbox_config, normal_config)
+
+    def test_sandbox_installer_writes_isolation_marker(self) -> None:
+        installer = Path("installer/echandochal_pos.iss").read_text(encoding="utf-8")
+        self.assertIn('[INI]', installer)
+        self.assertIn('Filename: "{app}\\sandbox-mode.ini"', installer)
+
     def test_operational_databases_are_ignored_by_git(self) -> None:
         ignore_rules = Path(".gitignore").read_text(encoding="utf-8")
 
