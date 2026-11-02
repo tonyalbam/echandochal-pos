@@ -73,6 +73,14 @@ class SaleDetailDialog(QDialog):
             )
 
         layout.addWidget(informacion)
+        if sale.get("payments"):
+            breakdown = " | ".join(
+                f"{row['metodo_pago']}: $ {row['monto']:,.2f}"
+                for row in sale["payments"]
+            )
+            payments_info = QLabel("Pagos de la venta: " + breakdown)
+            payments_info.setWordWrap(True)
+            layout.addWidget(payments_info)
 
         tabla = QTableWidget(
             len(sale["items"]),
