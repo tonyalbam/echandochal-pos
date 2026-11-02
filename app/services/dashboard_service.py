@@ -62,20 +62,11 @@ class DashboardService:
         cursor = self.database.cursor()
         cursor.execute(
             """
-            SELECT
-                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
-                SUM(
-                    CASE
-                        WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
-                        THEN v.total * dv.subtotal / v.subtotal
-                        ELSE dv.subtotal - dv.descuento
-                    END
-                ) AS ventas
-            FROM detalle_venta dv
-            INNER JOIN ventas v ON v.id = dv.venta_id
-            WHERE v.cancelada = 0
-              AND v.fecha LIKE ?
-            GROUP BY COALESCE(dv.metodo_pago, v.metodo_pago)
+            SELECT p.metodo_pago, ROUND(SUM(p.ventas), 2) AS ventas
+            FROM resumen_pagos_venta p
+            JOIN ventas v ON v.id = p.venta_id
+            WHERE v.cancelada = 0 AND v.fecha LIKE ?
+            GROUP BY p.metodo_pago
             """,
             (f"{period}%",),
         )
