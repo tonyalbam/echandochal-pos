@@ -233,6 +233,14 @@ class TicketService:
         document.line(self.MARGIN, y, self.WIDTH - self.MARGIN, y)
         y -= 14
 
+        if sale.get("payments"):
+            for payment in sale["payments"]:
+                document.setFont("Helvetica", 8)
+                document.drawString(
+                    self.MARGIN, y,
+                    f"{payment['metodo_pago']}: $ {payment['monto']:,.2f}"
+                )
+                y -= 11
         totals = [("Subtotal", sale["subtotal"])]
         if float(sale["descuento"]) > 0:
             totals.append(("Descuento", sale["descuento"]))
