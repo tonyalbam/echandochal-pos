@@ -7,7 +7,7 @@ def group_sale_items(items: list[dict]) -> tuple[list[dict], bool]:
         if product_id not in grouped:
             grouped[product_id] = dict(item)
             continue
-        if grouped[product_id]["metodo_pago"] != item["metodo_pago"]:
+        if grouped[product_id].get("metodo_pago") != item.get("metodo_pago"):
             had_mixed_payments = True
         grouped[product_id]["cantidad"] += float(item["cantidad"])
     return list(grouped.values()), had_mixed_payments
