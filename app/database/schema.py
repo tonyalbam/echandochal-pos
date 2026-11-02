@@ -193,6 +193,43 @@ def create_database(db: Database) -> None:
         """
     )
 
+    # Los pagos nuevos pertenecen a la venta completa; las partidas anteriores
+    # se conservan intactas para consultas y reportes históricos.
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS pagos_venta (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venta_id INTEGER NOT NULL,
+            metodo_pago TEXT NOT NULL CHECK (
+                metodo_pago IN ('Efectivo', 'Transferencia', 'Mercado Libre')
+            ),
+            monto REAL NOT NULL CHECK (monto > 0),
+            monto_comision REAL NOT NULL DEFAULT 0 CHECK (monto_comision >= 0),
+            FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE RESTRICT,
+            UNIQUE (venta_id, metodo_pago)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pagos_venta_venta ON pagos_venta(venta_id);
+
+        CREATE VIEW IF NOT EXISTS resumen_pagos_venta AS
+        SELECT p.venta_id, p.metodo_pago, p.monto AS ventas,
+               p.monto_comision AS comisiones
+          FROM pagos_venta p
+        UNION ALL
+        SELECT dv.venta_id,
+               COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
+               CASE WHEN dv.metodo_pago IS NULL AND v.subtotal > 0
+                    THEN v.total * dv.subtotal / v.subtotal
+                    ELSE dv.subtotal - dv.descuento END AS ventas,
+               COALESCE(dv.monto_comision,
+                   CASE WHEN v.subtotal > 0
+                        THEN v.monto_comision * dv.subtotal / v.subtotal
+                        ELSE 0 END) AS comisiones
+          FROM detalle_venta dv
+          JOIN ventas v ON v.id = dv.venta_id
+         WHERE NOT EXISTS (
+             SELECT 1 FROM pagos_venta p WHERE p.venta_id = dv.venta_id
+         );
+    """)
+
     # -------------------------------------------------
     # Migración: agregar costo_unitario a detalle_venta
     # -------------------------------------------------
