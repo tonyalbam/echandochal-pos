@@ -57,9 +57,8 @@ Name: "{autodesktop}\Echando Chal POS"; Filename: "{app}\EchandoChalPOS.exe"; Wo
 #endif
 
 [Run]
-Filename: "{app}\EchandoChalPOS.exe"; Description: "Abrir Echando Chal POS"; Flags: nowait postinstall skipifsilent
 #ifndef SandboxBuild
-
+Filename: "{app}\EchandoChalPOS.exe"; Description: "Abrir Echando Chal POS"; Flags: nowait postinstall skipifsilent
 #endif
 
 ; Protección de instalaciones antiguas que todavía guardan datos en {app}.
