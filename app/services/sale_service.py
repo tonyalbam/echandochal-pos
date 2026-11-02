@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.database.connection import Database
+from app.services.payment_allocation import calculate_payment
 
 
 class SaleService:
@@ -128,6 +129,8 @@ class SaleService:
         payment_method: str | None = None,
         discount: float = 0.0,
         user_id: Optional[int] = None,
+        payments: dict[str, float] | None = None,
+        cash_received: float | None = None,
     ) -> dict:
         """
         Registra una venta completa.
@@ -159,11 +162,18 @@ class SaleService:
         total = round(subtotal - discount, 2)
         default_method = payment_method or "Efectivo"
         commission_rate = self.get_commission_rate()
+        payment_info = None
+        if payments is not None:
+            payment_info = calculate_payment(
+                total, payments,
+                cash_received=(payments.get("Efectivo", 0) if cash_received is None else cash_received),
+                commission_percentage=commission_rate,
+            )
         prepared_items = []
         allocated_discount = 0.0
         for index, item in enumerate(items):
-            method = item.get("metodo_pago") or default_method
-            if method not in self.PAYMENT_METHODS:
+            method = (item.get("metodo_pago") or default_method) if payment_info is None else None
+            if method is not None and method not in self.PAYMENT_METHODS:
                 raise ValueError("El método de pago no es válido.")
             line_subtotal = round(
                 float(item["cantidad"]) * float(item["precio_unitario"]), 2
@@ -185,16 +195,18 @@ class SaleService:
                 "metodo_pago": method,
                 "subtotal": line_subtotal,
                 "descuento": line_discount,
-                "porcentaje_comision": rate,
-                "monto_comision": line_commission,
-                "total_neto": round(line_total - line_commission, 2),
+                "porcentaje_comision": rate if payment_info is None else None,
+                "monto_comision": line_commission if payment_info is None else None,
+                "total_neto": round(line_total - line_commission, 2) if payment_info is None else None,
             })
 
         methods = {item["metodo_pago"] for item in prepared_items}
         sale_payment_method = methods.pop() if len(methods) == 1 else "Mixto"
         commission = round(
             sum(item["monto_comision"] for item in prepared_items), 2
-        )
+        ) if payment_info is None else payment_info["commission"]
+        if payment_info is not None:
+            sale_payment_method = payment_info["payment_method"]
         total_net = round(total - commission, 2)
         sale_commission_rate = round(
             (commission / total * 100) if total > 0 else 0.0,
@@ -283,6 +295,17 @@ class SaleService:
             )
 
             sale_id = int(cursor.lastrowid)
+
+            if payment_info is not None:
+                for method, amount in payment_info['payments'].items():
+                    if amount <= 0:
+                        continue
+                    fee = round(amount * commission_rate / 100, 2) if method == 'Mercado Libre' else 0.0
+                    cursor.execute(
+                        '''INSERT INTO pagos_venta (venta_id, metodo_pago, monto, monto_comision)
+                           VALUES (?, ?, ?, ?)''',
+                        (sale_id, method, amount, fee),
+                    )
 
             # Detalle + actualización de inventario.
             for item in prepared_items:
@@ -407,6 +430,8 @@ class SaleService:
             "porcentaje_comision": sale_commission_rate,
             "monto_comision": commission,
             "total_neto": total_net,
+            "payments": payment_info["payments"] if payment_info else None,
+            "change": payment_info["change"] if payment_info else 0.0,
         }
 
     def _next_folio(self, fecha: str) -> str:
