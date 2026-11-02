@@ -167,7 +167,9 @@ class SaleHistoryService:
                 dv.costo_unitario,
                 dv.descuento,
                 dv.subtotal,
-                COALESCE(dv.metodo_pago, v.metodo_pago) AS metodo_pago,
+                CASE WHEN EXISTS (SELECT 1 FROM pagos_venta p WHERE p.venta_id = v.id)
+                     THEN 'Por venta' ELSE COALESCE(dv.metodo_pago, v.metodo_pago)
+                END AS metodo_pago,
                 COALESCE(
                     dv.porcentaje_comision,
                     v.porcentaje_comision,
