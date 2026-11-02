@@ -16,7 +16,9 @@ def configuration_file() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     if not base:
         raise RuntimeError("No se encontró LOCALAPPDATA en Windows.")
-    return Path(base) / "EchandoChalPOS" / CONFIG_NAME
+    sandbox = getattr(sys, "frozen", False) and (installation_directory() / "sandbox-mode.ini").is_file()
+    app_folder = "EchandoChalPOS-Sandbox" if sandbox else "EchandoChalPOS"
+    return Path(base) / app_folder / CONFIG_NAME
 
 
 def installation_directory() -> Path:
