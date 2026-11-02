@@ -170,12 +170,16 @@ class SaleHistoryService:
                 CASE WHEN EXISTS (SELECT 1 FROM pagos_venta p WHERE p.venta_id = v.id)
                      THEN 'Por venta' ELSE COALESCE(dv.metodo_pago, v.metodo_pago)
                 END AS metodo_pago,
-                COALESCE(
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM pagos_venta pago WHERE pago.venta_id = v.id
+                ) THEN 0 ELSE COALESCE(
                     dv.porcentaje_comision,
                     v.porcentaje_comision,
                     0
-                ) AS porcentaje_comision,
-                COALESCE(
+                ) END AS porcentaje_comision,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM pagos_venta pago WHERE pago.venta_id = v.id
+                ) THEN 0 ELSE COALESCE(
                     dv.monto_comision,
                     CASE
                         WHEN v.subtotal > 0
@@ -183,8 +187,10 @@ class SaleHistoryService:
                         ELSE 0
                     END,
                     0
-                ) AS monto_comision,
-                COALESCE(
+                ) END AS monto_comision,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM pagos_venta pago WHERE pago.venta_id = v.id
+                ) THEN dv.subtotal - dv.descuento ELSE COALESCE(
                     dv.total_neto,
                     (dv.subtotal - dv.descuento)
                     - CASE
@@ -192,7 +198,7 @@ class SaleHistoryService:
                         THEN v.monto_comision * dv.subtotal / v.subtotal
                         ELSE 0
                       END
-                ) AS total_neto
+                ) END AS total_neto
             FROM detalle_venta dv
             INNER JOIN ventas v
                 ON v.id = dv.venta_id
