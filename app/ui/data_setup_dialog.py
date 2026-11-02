@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QHBoxLayout, QRadioButton,
 )
 
-from app.database.data_location import installation_directory, validate_data_directory
+from app.database.data_location import installation_directory, validate_data_directory, save_data_directory, DB_NAME
 from app.database.data_migration import migrate_existing_database, initialize_new_database
 
 
@@ -31,8 +31,10 @@ class DataSetupDialog(QDialog):
         row.addWidget(browse)
         layout.addLayout(row)
         self.migrate = QRadioButton("Conservar y migrar la base de datos existente")
+        self.recover = QRadioButton("Recuperar una base ya copiada (sin sobrescribirla)")
         self.fresh = QRadioButton("Crear una base nueva (solo primera instalación)")
         layout.addWidget(self.migrate)
+        layout.addWidget(self.recover)
         layout.addWidget(self.fresh)
         source_row = QHBoxLayout()
         self.source_path = QLineEdit()
@@ -91,6 +93,18 @@ class DataSetupDialog(QDialog):
                 ) != QMessageBox.StandardButton.Yes:
                     return
                 migrate_existing_database(source, folder)
+            elif self.recover.isChecked():
+                database = folder / DB_NAME
+                if not database.is_file():
+                    raise FileNotFoundError(f"No existe una base recuperable en: {database}")
+                if QMessageBox.question(
+                    self, "Recuperar base existente",
+                    "Se comprobará la integridad de la base ya copiada y se guardará "
+                    "su ubicación. No se sobrescribirá ningún archivo.\n\n"
+                    f"Base seleccionada: {database}\n\n¿Continuar?"
+                ) != QMessageBox.StandardButton.Yes:
+                    return
+                save_data_directory(folder)
             else:
                 if QMessageBox.question(
                     self, "Confirmar base nueva",
