@@ -90,6 +90,14 @@ class PackagingTest(unittest.TestCase):
         )
         self.assertIn("hiddenimports=hiddenimports", spec)
 
+    def test_installer_blocks_upgrade_with_legacy_operational_data(self) -> None:
+        installer = Path("installer/echandochal_pos.iss").read_text(encoding="utf-8")
+        self.assertIn("function PrepareToInstall(var NeedsRestart: Boolean): String;", installer)
+        self.assertIn("FileExists(LegacyDatabase)", installer)
+        self.assertIn("FileExists(LegacyDatabase + '-wal')", installer)
+        self.assertIn("DirExists(ExpandConstant('{app}\\backups'))", installer)
+        self.assertIn("la instalación se ha detenido", installer)
+
     def test_operational_databases_are_ignored_by_git(self) -> None:
         ignore_rules = Path(".gitignore").read_text(encoding="utf-8")
 
