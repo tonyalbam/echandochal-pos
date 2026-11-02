@@ -225,9 +225,10 @@ class TicketService:
             )
             y -= 10
             document.setFont("Helvetica", 7)
-            document.drawString(
-                self.MARGIN, y, f"Pago: {item['metodo_pago']}"
-            )
+            if not sale.get("payments"):
+                document.drawString(
+                    self.MARGIN, y, f"Pago: {item['metodo_pago']}"
+                )
             y -= 16
 
         document.line(self.MARGIN, y, self.WIDTH - self.MARGIN, y)
