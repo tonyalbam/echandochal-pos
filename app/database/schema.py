@@ -230,6 +230,16 @@ def create_database(db: Database) -> None:
          );
     """)
 
+    # Borrado lógico: conserva las relaciones históricas con ventas y compras.
+    product_columns = {
+        column[1]
+        for column in cursor.execute("PRAGMA table_info(productos)").fetchall()
+    }
+    if "eliminado" not in product_columns:
+        cursor.execute(
+            "ALTER TABLE productos ADD COLUMN eliminado INTEGER NOT NULL DEFAULT 0"
+        )
+
     # -------------------------------------------------
     # Migración: agregar costo_unitario a detalle_venta
     # -------------------------------------------------
