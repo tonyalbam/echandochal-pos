@@ -1,18 +1,14 @@
 """Panel de analítica anual de Echando Chal POS."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtCharts import (
-    QAreaSeries, QChart, QChartView, QLineSeries, QPieSeries,
-    QValueAxis, QCategoryAxis,
-)
-from PySide6.QtGui import QColor, QBrush, QPen, QPainter
 from PySide6.QtWidgets import (
     QFrame, QGridLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView,
 )
-
+from app.ui.widgets.annual_analytics_charts import (
+    CumulativeProfitChart, RevenueDonutChart,
+)
 from app.ui.theme import theme_colors
-
 
 def _money(value: float) -> str:
     return f"$ {value:,.2f}"
@@ -93,10 +89,7 @@ class AnnualAnalyticsPanel(QWidget):
         performance_layout.addWidget(self._heading(
             "Utilidad acumulada por mes"
         ))
-        self.performance_chart = QChartView()
-        self.performance_chart.setRenderHint(
-            QPainter.RenderHint.Antialiasing
-        )
+        self.performance_chart = CumulativeProfitChart()
         self.performance_chart.setMinimumHeight(340)
         performance_layout.addWidget(self.performance_chart)
         charts.addWidget(self.performance_frame, 3)
@@ -107,8 +100,7 @@ class AnnualAnalyticsPanel(QWidget):
         pie_layout.addWidget(self._heading(
             "Top 5 productos por monto de ventas"
         ))
-        self.pie_chart = QChartView()
-        self.pie_chart.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.pie_chart = RevenueDonutChart()
         self.pie_chart.setMinimumHeight(340)
         pie_layout.addWidget(self.pie_chart)
         charts.addWidget(self.pie_frame, 2)
@@ -214,89 +206,11 @@ class AnnualAnalyticsPanel(QWidget):
         self._render_performance(summary["utilidad_acumulada"])
         self._render_revenue_pie(summary["top_productos_ingresos"])
 
-    def _chart_base(self) -> QChart:
-        colors = theme_colors(self._dark)
-        chart = QChart()
-        chart.setBackgroundBrush(QBrush(QColor(colors["surface"])))
-        chart.setPlotAreaBackgroundBrush(QBrush(QColor(colors["surface"])))
-        chart.setPlotAreaBackgroundVisible(True)
-        chart.setTitleBrush(QBrush(QColor(colors["text"])))
-        return chart
-
     def _render_performance(self, months: list[dict]) -> None:
-        colors = theme_colors(self._dark)
-        chart = self._chart_base()
-        chart.legend().hide()
-
-        line = QLineSeries()
-        line.setPen(QPen(QColor("#319BD8"), 3))
-        upper = QLineSeries()
-        for row in months:
-            line.append(row["mes"], float(row["acumulada"]))
-            upper.append(row["mes"], float(row["acumulada"]))
-
-        floor = min(0.0, *(float(row["acumulada"]) for row in months))
-        ceiling = max(0.0, *(float(row["acumulada"]) for row in months))
-        margin = max((ceiling - floor) * .12, 20.0)
-        baseline = QLineSeries()
-        for row in months:
-            baseline.append(row["mes"], min(0.0, floor))
-        area = QAreaSeries(upper, baseline)
-        area.setBrush(QBrush(QColor(49, 155, 216, 58)))
-        area.setPen(QPen(Qt.PenStyle.NoPen))
-        chart.addSeries(area)
-        chart.addSeries(line)
-
-        axis_x = QCategoryAxis()
-        axis_x.setRange(1, 12)
-        axis_x.setLabelsPosition(
-            QCategoryAxis.AxisLabelsPosition.AxisLabelsPositionOnValue
-        )
-        for number, name in enumerate(self.MONTH_NAMES, 1):
-            axis_x.append(name, number)
-        axis_y = QValueAxis()
-        axis_y.setRange(floor - margin, ceiling + margin)
-        axis_y.setLabelFormat("$%.0f")
-        axis_y.setTitleText("Utilidad acumulada (MXN)")
-        chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
-        chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
-        for series in (area, line):
-            series.attachAxis(axis_x)
-            series.attachAxis(axis_y)
-        for axis in (axis_x, axis_y):
-            axis.setLabelsBrush(QBrush(QColor(colors["text"])))
-            axis.setTitleBrush(QBrush(QColor(colors["text"])))
-            axis.setGridLineColor(QColor(colors["border"]))
-        self.performance_chart.setChart(chart)
+        self.performance_chart.set_data(months)
 
     def _render_revenue_pie(self, products: list[dict]) -> None:
-        colors = theme_colors(self._dark)
-        chart = self._chart_base()
-        chart.legend().setVisible(True)
-        chart.legend().setAlignment(Qt.AlignmentFlag.AlignRight)
-        chart.legend().setLabelBrush(QBrush(QColor(colors["text"])))
-        chart.legend().setFont(self.font())
-
-        pie = QPieSeries()
-        pie.setHoleSize(.52)
-        pie.setPieSize(.78)
-        for index, row in enumerate(products):
-            if row["ventas"] <= 0:
-                continue
-            label = (
-                f"{row['nombre']}\n"
-                f"{row['porcentaje']:.1f}% · {_money(row['ventas'])}"
-            )
-            slice_ = pie.append(label, float(row["ventas"]))
-            slice_.setBrush(QBrush(QColor(
-                self.CHART_COLORS[index % len(self.CHART_COLORS)]
-            )))
-            slice_.setBorderColor(QColor(colors["surface"]))
-            slice_.setBorderWidth(2)
-        chart.addSeries(pie)
-        if not products:
-            chart.setTitle("Sin ventas registradas")
-        self.pie_chart.setChart(chart)
+        self.pie_chart.set_data(products)
 
     def apply_theme(self, dark: bool) -> None:
         self._dark = bool(dark)
@@ -343,6 +257,5 @@ class AnnualAnalyticsPanel(QWidget):
                 background: transparent; border: none;
             }}
         """)
-        if self._latest is not None:
-            self._render_performance(self._latest["utilidad_acumulada"])
-            self._render_revenue_pie(self._latest["top_productos_ingresos"])
+        self.performance_chart.apply_theme(dark)
+        self.pie_chart.apply_theme(dark)
