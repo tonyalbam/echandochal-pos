@@ -42,6 +42,20 @@ class AnnualAnalyticsUiTest(unittest.TestCase):
         self.assertEqual(len(panel.performance_chart.months), 12)
         panel.close()
 
+    def test_all_future_months_render_without_crashing(self):
+        panel = AnnualAnalyticsPanel()
+        panel.performance_chart.set_data([
+            {"mes": month, "utilidad": None, "acumulada": None}
+            for month in range(1, 13)
+        ])
+        panel.show()
+        self.app.processEvents()
+        panel.performance_chart.repaint()
+        panel.apply_theme(True)
+        self.app.processEvents()
+        panel.performance_chart.repaint()
+        panel.close()
+
     def test_populated_charts_render_in_both_themes(self):
         panel = AnnualAnalyticsPanel()
         data = {
@@ -55,8 +69,10 @@ class AnnualAnalyticsUiTest(unittest.TestCase):
                 "nombre": "Ovillo verde", "unidades": 0, "dias": 180,
             },
             "utilidad_acumulada": [
-                {"mes": month, "utilidad": 0,
-                 "acumulada": month * 50 if month < 6 else -month * 15}
+                {"mes": month,
+                 "utilidad": (0 if month <= 11 else None),
+                 "acumulada": ((month * 50 if month < 6 else -month * 15)
+                                if month <= 11 else None)}
                 for month in range(1, 13)
             ],
             "top_productos_ingresos": [
@@ -77,6 +93,7 @@ class AnnualAnalyticsUiTest(unittest.TestCase):
         panel.performance_chart.repaint()
         panel.pie_chart.repaint()
         self.assertEqual(len(panel.pie_chart.products), 2)
+        self.assertIsNone(panel.performance_chart.months[11]["acumulada"])
         self.assertEqual(panel.stagnant.rowCount(), 1)
         panel.apply_theme(True)
         self.app.processEvents()
