@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import (
     QFileDialog,
     QDialog,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QShortcut,
     QMessageBox,
     QPushButton,
     QTabWidget,
@@ -228,6 +229,13 @@ class ProductsWindow(QWidget):
         )
 
         self.table.doubleClicked.connect(self._edit_selected)
+        self.delete_shortcut_products = QShortcut(
+            QKeySequence(Qt.Key.Key_Delete), self.table
+        )
+        self.delete_shortcut_products.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.delete_shortcut_products.activated.connect(self._delete_selected)
 
         self.table.horizontalHeader().setStretchLastSection(True)
 
@@ -256,6 +264,13 @@ class ProductsWindow(QWidget):
             QTableWidget.EditTrigger.NoEditTriggers
         )
         self.low_stock_table.doubleClicked.connect(self._edit_selected)
+        self.delete_shortcut_low_stock = QShortcut(
+            QKeySequence(Qt.Key.Key_Delete), self.low_stock_table
+        )
+        self.delete_shortcut_low_stock.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.delete_shortcut_low_stock.activated.connect(self._delete_selected)
         self.low_stock_table.horizontalHeader().setStretchLastSection(True)
 
         self.tabs = QTabWidget()
@@ -271,11 +286,18 @@ class ProductsWindow(QWidget):
         deactivate_button = QPushButton("Desactivar")
         deactivate_button.clicked.connect(self._deactivate_selected)
 
+        delete_button = QPushButton("Eliminar")
+        delete_button.setToolTip(
+            "Retira el producto del catálogo sin borrar ventas o compras históricas (Supr)."
+        )
+        delete_button.clicked.connect(self._delete_selected)
+
         label_button = QPushButton("Generar etiqueta")
         label_button.clicked.connect(self._generate_label)
 
         buttons.addWidget(edit_button)
         buttons.addWidget(deactivate_button)
+        buttons.addWidget(delete_button)
         buttons.addWidget(label_button)
         buttons.addStretch()
 
@@ -452,6 +474,59 @@ class ProductsWindow(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             self.service.deactivate_product(product_id)
             self._load_products()
+
+    def _delete_selected(self) -> None:
+        product_id = self._selected_product_id()
+        if product_id is None:
+            QMessageBox.information(
+                self, "Selecciona un producto",
+                "Selecciona la fila del producto que deseas eliminar."
+            )
+            return
+
+        product = self.service.get_product(product_id)
+        if product is None or product.get("eliminado", 0):
+            QMessageBox.warning(
+                self, "Producto no disponible",
+                "El producto ya no está disponible en el catálogo."
+            )
+            self._load_products()
+            return
+
+        warning = (
+            f"¿Eliminar del catálogo el producto?\\n\\n"
+            f"{product['codigo']} | {product['nombre']}\\n\\n"
+            "Ya no aparecerá en Productos ni podrá utilizarse en nuevas "
+            "ventas o compras.\\n\\n"
+            "Se conservarán las ventas, compras y movimientos históricos. "
+            "Esta acción no se puede deshacer desde la interfaz."
+        )
+        if float(product.get("existencia") or 0) != 0:
+            warning += (
+                f"\\n\\nAtención: tiene una existencia de "
+                f"{float(product['existencia']):g} unidades. "
+                "Dejará de contabilizarse como inventario activo."
+            )
+
+        reply = QMessageBox.question(
+            self, "Confirmar eliminación de producto",
+            warning,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            self.service.delete_product(product_id)
+        except (ValueError, RuntimeError, OSError) as error:
+            QMessageBox.critical(self, "No se pudo eliminar", str(error))
+            return
+        self._load_products()
+        QMessageBox.information(
+            self, "Producto eliminado",
+            "El producto se retiró del catálogo. Su historial se conserva."
+        )
 
     def _export_inventory(self) -> None:
         destination, _ = QFileDialog.getSaveFileName(
