@@ -43,7 +43,7 @@ class CatalogImprovementsTest(unittest.TestCase):
         categories = ProductService(self.database).get_categories()
         self.assertEqual(
             [category["nombre"] for category in categories],
-            list(ProductService.ALLOWED_CATEGORIES),
+            sorted(ProductService.ALLOWED_CATEGORIES, key=str.casefold),
         )
 
     def test_internal_product_codes_are_generated_sequentially(self) -> None:
