@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.purchase_service import PurchaseService
+from app.ui.widgets.column_sort import next_sort, sort_records, SortableItem
 
 
 class ClearOnFocusLineEdit(QLineEdit):
@@ -185,6 +186,9 @@ class PurchaseWindow(QWidget):
 
         self.table.horizontalHeader().setStretchLastSection(
             True
+        )
+        self.table.horizontalHeader().sectionDoubleClicked.connect(
+            self._sort_purchase_lines
         )
 
         layout.addWidget(
@@ -499,7 +503,39 @@ class PurchaseWindow(QWidget):
 
         self._refresh_table()
 
+    def _sort_purchase_lines(self, column: int) -> None:
+        # Hay QSpinBox por fila: ordenar el modelo antes de volver a
+        # dibujar evita que el editor modifique un producto diferente.
+        next_sort(self.table, column)
+        fields = (
+            (lambda item: item["codigo"], False),
+            (lambda item: item["nombre"], False),
+            (lambda item: item["marca"], False),
+            (lambda item: item["color"], False),
+            (lambda item: item["categoria"], False),
+            (lambda item: item["cantidad"], True),
+            (lambda item: item["costo_unitario"], True),
+            (lambda item: item["cantidad"] * item["costo_unitario"], True),
+        )
+        _, ascending = self.table._heading_sort
+        sort_records(self.items, column, ascending, fields)
+        self._refresh_table()
+
     def _refresh_table(self) -> None:
+        state = getattr(self.table, "_heading_sort", None)
+        if state is not None:
+            col, ascending = state
+            fields = (
+                (lambda item: item["codigo"], False),
+                (lambda item: item["nombre"], False),
+                (lambda item: item["marca"], False),
+                (lambda item: item["color"], False),
+                (lambda item: item["categoria"], False),
+                (lambda item: item["cantidad"], True),
+                (lambda item: item["costo_unitario"], True),
+                (lambda item: item["cantidad"] * item["costo_unitario"], True),
+            )
+            sort_records(self.items, col, ascending, fields)
         self.table.setRowCount(0)
 
         total = 0.0
