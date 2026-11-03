@@ -230,8 +230,10 @@ class AnnualAnalyticsPanel(QWidget):
 
         line = QLineSeries()
         line.setPen(QPen(QColor("#319BD8"), 3))
+        upper = QLineSeries()
         for row in months:
             line.append(row["mes"], float(row["acumulada"]))
+            upper.append(row["mes"], float(row["acumulada"]))
 
         floor = min(0.0, *(float(row["acumulada"]) for row in months))
         ceiling = max(0.0, *(float(row["acumulada"]) for row in months))
@@ -239,7 +241,7 @@ class AnnualAnalyticsPanel(QWidget):
         baseline = QLineSeries()
         for row in months:
             baseline.append(row["mes"], min(0.0, floor))
-        area = QAreaSeries(line, baseline)
+        area = QAreaSeries(upper, baseline)
         area.setBrush(QBrush(QColor(49, 155, 216, 58)))
         area.setPen(QPen(Qt.PenStyle.NoPen))
         chart.addSeries(area)
