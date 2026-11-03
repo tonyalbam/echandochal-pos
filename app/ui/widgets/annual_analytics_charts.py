@@ -44,7 +44,14 @@ class CumulativeProfitChart(QWidget):
             return
         graph = QRectF(bounds.left() + 66, bounds.top() + 14,
                        bounds.width() - 83, bounds.height() - 61)
-        values = [float(item["acumulada"]) for item in self.months]
+        # Null indica un mes futuro: se conserva la etiqueta, no el punto.
+        months = self.months[:12]
+        visible = [
+            (index, float(item["acumulada"]))
+            for index, item in enumerate(months)
+            if item.get("acumulada") is not None
+        ]
+        values = [value for _, value in visible]
         if not values:
             p.setPen(QColor(colors["muted"]))
             p.drawText(bounds, Qt.AlignmentFlag.AlignCenter, "Sin datos del año")
@@ -62,7 +69,8 @@ class CumulativeProfitChart(QWidget):
             return graph.bottom() - (value - low) / span * graph.height()
 
         def x_of(index):
-            return graph.left() + index / max(1, len(values) - 1) * graph.width()
+            # Las etiquetas mantienen doce meses, aun sin datos futuros.
+            return graph.left() + index / 11 * graph.width()
 
         p.setFont(QFont(self.font().family(), 9))
         for tick in range(5):
@@ -76,23 +84,27 @@ class CumulativeProfitChart(QWidget):
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                 f"{value:,.0f}",
             )
-        for index, month in enumerate(MONTHS[:len(values)]):
+        for index, month in enumerate(MONTHS):
             p.setPen(QColor(colors["muted"]))
             p.drawText(
                 QRectF(x_of(index) - 18, graph.bottom() + 10, 36, 20),
                 Qt.AlignmentFlag.AlignCenter, month,
             )
         baseline = y_of(0)
-        area = QPainterPath(QPointF(x_of(0), baseline))
+        first_index = visible[0][0]
+        last_index = visible[-1][0]
+        area = QPainterPath(QPointF(x_of(first_index), baseline))
         line = QPainterPath()
-        for index, value in enumerate(values):
+        previous_index = None
+        for index, value in visible:
             point = QPointF(x_of(index), y_of(value))
-            if index == 0:
+            if previous_index is None or index != previous_index + 1:
                 line.moveTo(point)
             else:
                 line.lineTo(point)
             area.lineTo(point)
-        area.lineTo(QPointF(x_of(len(values) - 1), baseline))
+            previous_index = index
+        area.lineTo(QPointF(x_of(last_index), baseline))
         area.closeSubpath()
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QBrush(QColor(49, 155, 216, 58)))
@@ -101,7 +113,7 @@ class CumulativeProfitChart(QWidget):
         p.setPen(QPen(QColor("#319BD8"), 3))
         p.drawPath(line)
         p.setBrush(QColor("#319BD8"))
-        for index, value in enumerate(values):
+        for index, value in visible:
             p.drawEllipse(QPointF(x_of(index), y_of(value)), 3, 3)
         p.end()
 
