@@ -93,14 +93,19 @@ class CatalogManagerDialog(QDialog):
                 "Selecciona la opción que deseas eliminar."
             )
             return
-        confirmation = QMessageBox.question(
-            self, "Confirmar eliminación",
-            f"¿Quitar '{current.text()}' de las opciones disponibles?\\n\\n"
-            "Los productos existentes y los historiales no se modificarán.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+        confirm = QMessageBox(self)
+        confirm.setWindowTitle("Confirmar eliminación")
+        confirm.setIcon(QMessageBox.Icon.Warning)
+        confirm.setText(
+            f"¿Quitar '{current.text()}' de las opciones disponibles?\n\n"
+            "Los productos existentes y los historiales no se modificarán."
         )
-        if confirmation != QMessageBox.StandardButton.Yes:
+        yes = confirm.addButton("Sí, eliminar", QMessageBox.ButtonRole.YesRole)
+        no = confirm.addButton("No, cancelar", QMessageBox.ButtonRole.NoRole)
+        confirm.setDefaultButton(no)
+        confirm.setEscapeButton(no)
+        confirm.exec()
+        if confirm.clickedButton() is not yes:
             return
         from PySide6.QtCore import Qt
         try:
