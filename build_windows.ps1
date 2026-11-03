@@ -17,7 +17,9 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 }
 
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { throw "No se pudo actualizar pip." }
 & .\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+if ($LASTEXITCODE -ne 0) { throw "No se pudieron instalar las dependencias." }
 
 $BuildDirectory = Join-Path $ProjectRoot "build"
 $DistributionDirectory = Join-Path $ProjectRoot "dist\EchandoChalPOS"
@@ -41,11 +43,11 @@ $PortableArchive = Join-Path $ReleaseDirectory (
 Compress-Archive -Path $DistributionDirectory -DestinationPath $PortableArchive
 
 $InnoCandidates = @(
-    "D:\\Inno Setup 7\\ISCC.exe",
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 7\\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 7\\ISCC.exe"),
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 6\\ISCC.exe")
+    "D:\Inno Setup 7\ISCC.exe",
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 7\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 7\ISCC.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
 ) | Where-Object { $_ -and (Test-Path $_) }
 
 if ($InnoCandidates.Count -gt 0) {
