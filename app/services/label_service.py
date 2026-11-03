@@ -97,7 +97,7 @@ class LabelService:
         qr_value = str(product.get("codigo_qr") or product["codigo"])
         if mode in ("Código de barras", "Ambos"):
             img = PILImage.open(self._barcode_image(bar_value))
-            max_width = 58 * mm if mode == "Ambos" else width - 14 * mm
+            max_width = min(58 * mm, width - 32 * mm) if mode == "Ambos" else width - 14 * mm
             barcode_width = min(max_width, 0.85 * width)
             barcode_height = 21 * mm
             left = x + 5 * mm if mode == "Ambos" else cx - barcode_width / 2
@@ -215,5 +215,17 @@ class LabelService:
         self, product_id: int, destination: str | Path,
         format_name: str = "Ambos",
     ) -> Path:
-        """Compatibilidad con el flujo antiguo de una sola etiqueta PDF."""
-        return self.generate_product_labels([product_id], destination, format_name)
+        """Conserva las etiquetas individuales tradicionales de 80 x 50 mm."""
+        if format_name not in self.FORMATS:
+            raise ValueError("El contenido de etiqueta no es válido.")
+        product = self._products_for_labels([product_id])[0]
+        output_path = Path(destination).with_suffix(".pdf")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        page_width, page_height = 80 * mm, 50 * mm
+        pdf = canvas.Canvas(str(output_path), pagesize=(page_width, page_height))
+        pdf.setTitle(f"Etiqueta {product['codigo']}")
+        self._draw_pdf_label(
+            pdf, product, format_name, 0, 0, page_width, page_height
+        )
+        pdf.save()
+        return output_path
