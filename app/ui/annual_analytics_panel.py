@@ -74,7 +74,7 @@ class AnnualAnalyticsPanel(QWidget):
         self.brand = AnnualAnalyticsCard("Marca más vendida", "◆")
         self.units = AnnualAnalyticsCard("Producto líder por unidades", "★")
         self.profit = AnnualAnalyticsCard("Producto más rentable", "◈")
-        self.slowest = AnnualAnalyticsCard("Menor rotación", "◷")
+        self.slowest = AnnualAnalyticsCard("Menor rotación (90+ días)", "◷")
         for index, card in enumerate(
             (self.brand, self.units, self.profit, self.slowest)
         ):
@@ -175,11 +175,11 @@ class AnnualAnalyticsPanel(QWidget):
         )
         slowest = summary["producto_menos_vendido"]
         self.slowest.update_contents(
-            slowest["nombre"] if slowest else "Sin productos",
+            slowest["nombre"] if slowest else "Sin productos elegibles",
             (
                 f"{slowest['unidades']:g} unidades vendidas · "
                 f"{slowest['dias']} días en inventario"
-                if slowest else "Sin existencias activas"
+                if slowest else "Ningún producto con 90 días en inventario"
             ),
         )
 
