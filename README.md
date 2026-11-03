@@ -20,37 +20,57 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-La información se guarda en `data\echandochal.db`. Los respaldos automáticos
-se crean en `backups\automaticos` una vez por día al iniciar el sistema.
+La base de datos se guarda en una carpeta externa que el usuario configura
+al iniciar. Los respaldos automáticos diarios se crean en la carpeta de
+datos y no junto al ejecutable.
 
-## Generar el ejecutable y el instalador de Windows
+## Generar instalador final v1.0.0 para Windows
 
-Desde PowerShell ejecuta:
+La versión final mantiene la base de datos **fuera** de la carpeta del
+programa, de manera que futuras actualizaciones no borren el inventario
+ni los históricos. En instalaciones nuevas, el asistente solicita la
+carpeta de datos y crea una base vacía; en instalaciones existentes
+reutiliza la ubicación previamente configurada.
+
+Desde PowerShell, en Windows con Python 3.13 e Inno Setup 6 o 7:
 
 ```powershell
-.\build_windows.ps1 -Version "1.0.0-rc1"
+cd D:\EchandoChalPointOfSales
+git pull origin feature/persistent-data-location
+.\.venv\Scripts\python.exe -m pytest -q
+.\build_windows.ps1 -Version "1.0.0" -RequireInstaller
 ```
 
-El script elimina compilaciones anteriores y comprueba que la entrega no
-contenga bases de datos ni respaldos. Los resultados quedan en:
+La compilación genera:
 
 ```text
 dist\EchandoChalPOS\EchandoChalPOS.exe
-release\EchandoChalPOS-Portable-1.0.0-rc1.zip
-release\EchandoChalPOS-Setup-1.0.0-rc1.exe
+release\EchandoChalPOS-Portable-1.0.0.zip
+release\EchandoChalPOS-Setup-1.0.0.exe
 ```
 
-Para crear el instalador se requiere Inno Setup 6. Si no está disponible, el
-script genera la versión portable. En GitHub, el flujo **Construir instalador de
-Windows** produce automáticamente ambos archivos como un artefacto descargable.
+El script valida que el paquete **no contiene archivos .db, .sqlite,
+data ni backups**, y se detiene si la auditoría o Inno Setup fallan.
 
-Al ejecutar la versión compilada, las carpetas `data` y `backups` se crean junto
-al ejecutable. Se recomienda instalarla en una carpeta con permisos de escritura,
-por ejemplo `C:\EchandoChalPOS`, y no dentro de `Archivos de programa`.
+También puede utilizarse el flujo de GitHub Actions
+**Construir instalador de Windows** desde la rama de publicación
+`release/1.0.0`, que ejecuta pruebas y adjunta ambos archivos a
+la ejecución como artefactos descargables.
 
-La distribución nunca incluye `data`, `backups` ni archivos SQLite. En una
-instalación nueva, productos, proveedores, compras y ventas comienzan vacíos;
-solo se crean la configuración predeterminada y las categorías necesarias.
+### Actualización segura de instalaciones existentes
+
+1. **Antes de instalar**, crear un respaldo desde Configuración y validar
+   que se pueda leer, fuera de la carpeta del programa.
+2. Conservar intacta la base de datos activa en una carpeta externa y
+   el archivo `data-location.json` del perfil normal de Windows.
+3. Cerrar Echando Chal POS antes de instalar la nueva versión.
+4. El instalador cancela la instalación si encuentra una base antigua
+   o respaldos dentro de la carpeta de instalación.
+5. No eliminar, mover ni restaurar la base de producción al instalar.
+6. Abrir la aplicación y comprobar productos, ventas, compras y reportes.
+
+Los respaldos automáticos diarios quedan en
+`<carpeta-datos>\backups\automaticos`. No se transfieren al instalador.
 
 ## Escáner de códigos de barras y QR
 
