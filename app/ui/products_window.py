@@ -25,6 +25,7 @@ from app.database.connection import Database
 from app.services.product_service import ProductService
 from app.services.label_service import LabelService
 from app.ui.theme import theme_colors
+from app.ui.widgets.column_sort import SortableItem, install_table_sort, restore_table_sort
 from app.ui.product_dialog import ProductDialog
 from app.ui.quick_stock_dialog import QuickStockDialog
 from app.services.quick_stock_service import QuickStockService
@@ -242,6 +243,7 @@ class ProductsWindow(QWidget):
         self.delete_shortcut_products.activated.connect(self._delete_selected)
 
         self.table.horizontalHeader().setStretchLastSection(True)
+        install_table_sort(self.table)
 
         self.low_stock_table = QTableWidget()
         self.low_stock_table.setColumnCount(9)
@@ -276,6 +278,7 @@ class ProductsWindow(QWidget):
         )
         self.delete_shortcut_low_stock.activated.connect(self._delete_selected)
         self.low_stock_table.horizontalHeader().setStretchLastSection(True)
+        install_table_sort(self.low_stock_table)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self.table, "Todos los productos")
@@ -342,7 +345,7 @@ class ProductsWindow(QWidget):
             ]
 
             for column, value in enumerate(values):
-                item = QTableWidgetItem(str(value))
+                item = SortableItem(str(value), numeric=column in [8,9,10,11])
 
                 if column in (8, 9, 10, 11):
                     item.setTextAlignment(
@@ -365,6 +368,7 @@ class ProductsWindow(QWidget):
             )
 
         self.table.resizeColumnsToContents()
+        restore_table_sort(self.table)
         self._load_low_stock_products()
 
     def _load_low_stock_products(self) -> None:
@@ -385,7 +389,7 @@ class ProductsWindow(QWidget):
                 product["proveedor"],
             ]
             for column, value in enumerate(values):
-                item = QTableWidgetItem(str(value))
+                item = SortableItem(str(value), numeric=column in [5,6,7])
                 if column in (5, 6, 7):
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight
@@ -398,6 +402,7 @@ class ProductsWindow(QWidget):
             )
 
         self.low_stock_table.resizeColumnsToContents()
+        restore_table_sort(self.low_stock_table)
 
     @staticmethod
     def _stock_status(product: dict) -> str:
