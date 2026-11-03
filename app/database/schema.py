@@ -193,6 +193,26 @@ def create_database(db: Database) -> None:
         """
     )
 
+    # Catálogo configurable de unidades; conserva los textos ya utilizados.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS unidades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            activo INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    for name in (
+        "pieza", "madeja", "ovillo", "metro", "gramo", "kilogramo", "paquete"
+    ):
+        cursor.execute(
+            "INSERT OR IGNORE INTO unidades (nombre) VALUES (?)", (name,)
+        )
+    cursor.execute("""
+        INSERT OR IGNORE INTO unidades (nombre)
+        SELECT DISTINCT TRIM(unidad) FROM productos
+        WHERE unidad IS NOT NULL AND TRIM(unidad) <> ''
+    """)
+
     # Los pagos nuevos pertenecen a la venta completa; las partidas anteriores
     # se conservan intactas para consultas y reportes históricos.
     cursor.executescript("""
@@ -352,7 +372,7 @@ def _insertar_categorias_iniciales(db: Database) -> None:
             """
             INSERT INTO categorias (nombre, activo)
             VALUES (?, 1)
-            ON CONFLICT(nombre) DO UPDATE SET activo = 1
+            ON CONFLICT(nombre) DO NOTHING
             """,
             (category,),
         )
