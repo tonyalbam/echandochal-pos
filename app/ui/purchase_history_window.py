@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.purchase_service import PurchaseService
+from app.ui.widgets.column_sort import next_sort, sort_records, SortableItem
 
 
 class PurchaseDetailDialog(QDialog):
@@ -150,6 +151,9 @@ class PurchaseHistoryWindow(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(
             5, QHeaderView.ResizeMode.Stretch
         )
+        self.table.horizontalHeader().sectionDoubleClicked.connect(
+            self._sort_purchases
+        )
         layout.addWidget(self.table, 1)
 
         buttons = QHBoxLayout()
@@ -208,6 +212,28 @@ class PurchaseHistoryWindow(QWidget):
             date_to=date_to,
         )
 
+        if hasattr(self.table, "_heading_sort"):
+            self._apply_purchase_sort()
+        self._render_purchases()
+
+    def _sort_purchases(self, column: int) -> None:
+        next_sort(self.table, column)
+        self._apply_purchase_sort()
+        self._render_purchases()
+
+    def _apply_purchase_sort(self) -> None:
+        column, ascending = self.table._heading_sort
+        keys = (
+            (lambda p: p["folio"], False),
+            (lambda p: p["fecha"], False),
+            (lambda p: p["proveedor"], False),
+            (lambda p: p["subtotal"], True),
+            (lambda p: p["total"], True),
+            (lambda p: p["notas"] or "", False),
+        )
+        sort_records(self.purchases, column, ascending, keys)
+
+    def _render_purchases(self) -> None:
         self.table.setRowCount(0)
         for row, purchase in enumerate(self.purchases):
             self.table.insertRow(row)
@@ -217,7 +243,7 @@ class PurchaseHistoryWindow(QWidget):
                 f"$ {purchase['total']:,.2f}", purchase["notas"] or "",
             )
             for column, value in enumerate(values):
-                self.table.setItem(row, column, QTableWidgetItem(str(value)))
+                self.table.setItem(row, column, SortableItem(str(value), numeric=column in (3, 4)))
 
     def _show_detail(self) -> None:
         row = self.table.currentRow()
