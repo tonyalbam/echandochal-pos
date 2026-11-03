@@ -450,7 +450,7 @@ class PurchaseWindow(QWidget):
 
         self._refresh_table()
 
-        row = len(self.items) - 1
+        row = self.items.index(item)
 
         self.table.selectRow(row)
 
@@ -478,15 +478,16 @@ class PurchaseWindow(QWidget):
             )
             return
 
-        self.items[row]["cantidad"] = int(self.quantity.value())
+        current_item = self.items[row]
+        current_item["cantidad"] = int(self.quantity.value())
 
-        self.items[row]["costo_unitario"] = float(
+        current_item["costo_unitario"] = float(
             self.unit_cost.value()
         )
 
         self._refresh_table()
 
-        self.table.selectRow(row)
+        self.table.selectRow(self.items.index(current_item))
 
     def _remove_selected_line(self) -> None:
         row = self._selected_row()
