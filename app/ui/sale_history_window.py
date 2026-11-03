@@ -24,6 +24,19 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.sale_history_service import SaleHistoryService
 from app.services.ticket_service import TicketService
+from app.ui.widgets.column_sort import next_sort, sort_value
+
+
+class SortableSaleItem(QTreeWidgetItem):
+    """Compara importes en pesos numéricamente, fechas ISO y texto alfabético."""
+
+    def __lt__(self, other):
+        tree = self.treeWidget()
+        column = tree.sortColumn() if tree is not None else 0
+        numeric = column in (4, 5, 6, 7)
+        return sort_value(self.text(column), numeric) < sort_value(
+            other.text(column), numeric
+        )
 
 
 class SaleDetailDialog(QDialog):
@@ -393,6 +406,7 @@ class SaleHistoryWindow(QWidget):
             QHeaderView.ResizeMode.ResizeToContents,
         )
 
+        header.sectionDoubleClicked.connect(self._sort_sales)
         layout.addWidget(
             self.tabla,
             1,
@@ -450,6 +464,27 @@ class SaleHistoryWindow(QWidget):
 
         self._actualizar_botones()
 
+    def _sort_sales(self, column: int) -> None:
+        next_sort(self.tabla, column)
+        self._apply_sales_sort()
+
+    def _apply_sales_sort(self) -> None:
+        state = getattr(self.tabla, "_heading_sort", None)
+        if state is None:
+            return
+        column, ascending = state
+        order = (Qt.SortOrder.AscendingOrder if ascending
+                 else Qt.SortOrder.DescendingOrder)
+        if self.agrupar.currentText() == "Año y mes":
+            # Conservar los grupos anuales y mensuales; ordenar las
+            # ventas dentro de cada mes sin mezclar periodos.
+            for index in range(self.tabla.topLevelItemCount()):
+                year_item = self.tabla.topLevelItem(index)
+                for month_index in range(year_item.childCount()):
+                    year_item.child(month_index).sortChildren(column, order)
+        else:
+            self.tabla.sortItems(column, order)
+
     def _load_sales(self) -> None:
         date_from, date_to = self._periodo_activo()
 
@@ -471,6 +506,7 @@ class SaleHistoryWindow(QWidget):
             for sale in self.sales:
                 self.tabla.addTopLevelItem(self._sale_item(sale))
 
+        self._apply_sales_sort()
         self._actualizar_botones()
 
     def _load_grouped_sales(self) -> None:
@@ -510,7 +546,7 @@ class SaleHistoryWindow(QWidget):
             f"$ {sale['monto_comision']:,.2f}",
             "CANCELADA" if sale["cancelada"] else "ACTIVA",
         ]
-        item = QTreeWidgetItem([str(value) for value in valores])
+        item = SortableSaleItem([str(value) for value in valores])
         item.setData(0, Qt.ItemDataRole.UserRole, int(sale["id"]))
         return item
 
