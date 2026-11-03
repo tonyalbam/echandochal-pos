@@ -222,6 +222,10 @@ class MainWindow(QMainWindow):
         elif indice == 8:
             self.configuration_window.refresh()
 
+    def apply_theme(self, dark: bool) -> None:
+        """Actualiza las vistas que mantienen reglas locales de color."""
+        self.dashboard_window.apply_theme(dark)
+
     def _apply_settings(self, settings: dict) -> None:
         business_name = settings["nombre_negocio"]
         self.setWindowTitle(f"{business_name} POS")
