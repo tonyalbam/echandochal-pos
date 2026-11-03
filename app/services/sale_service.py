@@ -43,7 +43,7 @@ class SaleService:
             FROM productos p
             LEFT JOIN categorias c
                 ON c.id = p.categoria_id
-            WHERE p.activo = 1
+            WHERE p.activo = 1 AND p.eliminado = 0
               AND (
                   p.codigo = ?
                   OR p.codigo_barras = ?
@@ -76,7 +76,7 @@ class SaleService:
                 COALESCE(c.nombre, '') AS categoria
             FROM productos p
             LEFT JOIN categorias c ON c.id = p.categoria_id
-            WHERE p.activo = 1
+            WHERE p.activo = 1 AND p.eliminado = 0
               AND (
                   p.codigo LIKE ?
                   OR COALESCE(p.codigo_barras, '') LIKE ?
@@ -240,7 +240,7 @@ class SaleService:
                     SELECT nombre, existencia
                     FROM productos
                     WHERE id = ?
-                      AND activo = 1
+                      AND activo = 1 AND eliminado = 0
                     """,
                     (product_id,),
                 )
