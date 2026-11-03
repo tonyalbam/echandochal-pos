@@ -5,8 +5,9 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QTableWidget
+from PySide6.QtWidgets import QApplication, QTableWidget, QTreeWidget, QTreeWidgetItem
 
+from app.ui.sale_history_window import SortableSaleItem
 from app.ui.widgets.column_sort import (
     SortableItem, install_table_sort, restore_table_sort, next_sort,
     sort_records, sort_value,
@@ -73,6 +74,53 @@ class ColumnSortingTest(unittest.TestCase):
         products[0]["cantidad"] = 20
         self.assertEqual(third["cantidad"], 20)
         self.assertEqual(second["cantidad"], 3)
+
+    def test_sales_history_money_sort_and_group_integrity(self):
+        tree = QTreeWidget()
+        tree.setColumnCount(9)
+        for folio, amount in (("A", 1200), ("B", 90), ("C", 8)):
+            values = [folio, "2026-11-02", "", "", f"$ {amount:,.2f}",
+                      "$ 0.00", f"$ {amount:,.2f}", "$ 0.00", "ACTIVA"]
+            tree.addTopLevelItem(SortableSaleItem(values))
+        tree._heading_sort = (6, True)
+        tree.sortItems(6, Qt.SortOrder.AscendingOrder)
+        self.assertEqual(
+            [tree.topLevelItem(i).text(0) for i in range(3)],
+            ["C", "B", "A"],
+        )
+        tree._heading_sort = (6, False)
+        tree.sortItems(6, Qt.SortOrder.DescendingOrder)
+        self.assertEqual(
+            [tree.topLevelItem(i).text(0) for i in range(3)],
+            ["A", "B", "C"],
+        )
+        tree.close()
+
+    def test_grouped_sales_sort_only_within_month(self):
+        tree = QTreeWidget()
+        tree.setColumnCount(9)
+        year = QTreeWidgetItem(["2026"])
+        tree.addTopLevelItem(year)
+        jan = QTreeWidgetItem(["Enero"])
+        feb = QTreeWidgetItem(["Febrero"])
+        year.addChild(jan)
+        year.addChild(feb)
+        for parent, folio, amount in (
+            (jan, "JAN-A", 200), (jan, "JAN-B", 20),
+            (feb, "FEB-A", 700), (feb, "FEB-B", 50),
+        ):
+            parent.addChild(SortableSaleItem([
+                folio, "", "", "", f"$ {amount:.2f}",
+                "$ 0.00", f"$ {amount:.2f}", "$ 0.00", "ACTIVA",
+            ]))
+        tree._heading_sort = (6, True)
+        jan.sortChildren(6, Qt.SortOrder.AscendingOrder)
+        feb.sortChildren(6, Qt.SortOrder.AscendingOrder)
+        self.assertEqual(jan.child(0).text(0), "JAN-B")
+        self.assertEqual(feb.child(0).text(0), "FEB-B")
+        self.assertEqual(tree.topLevelItemCount(), 1)
+        self.assertEqual(year.childCount(), 2)
+        tree.close()
 
     def test_dates_and_zero_values(self):
         self.assertLess(sort_value("$ 9.00", True), sort_value("$ 100.00", True))
