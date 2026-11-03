@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.0.0-rc1",
+    [string]$Version = "1.0.0",
     [switch]$RequireInstaller
 )
 
@@ -30,7 +30,9 @@ foreach ($Target in @($BuildDirectory, $DistributionDirectory, $ReleaseDirectory
 }
 
 & .\.venv\Scripts\python.exe -m PyInstaller --clean --noconfirm echandochal_pos.spec
+if ($LASTEXITCODE -ne 0) { throw "Falló PyInstaller." }
 & .\.venv\Scripts\python.exe tools\verify_clean_distribution.py $DistributionDirectory
+if ($LASTEXITCODE -ne 0) { throw "La distribución contiene datos operativos o está incompleta." }
 
 New-Item -ItemType Directory -Force -Path $ReleaseDirectory | Out-Null
 $PortableArchive = Join-Path $ReleaseDirectory (
@@ -39,19 +41,25 @@ $PortableArchive = Join-Path $ReleaseDirectory (
 Compress-Archive -Path $DistributionDirectory -DestinationPath $PortableArchive
 
 $InnoCandidates = @(
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
+    "D:\\Inno Setup 7\\ISCC.exe",
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 7\\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 7\\ISCC.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 6\\ISCC.exe")
 ) | Where-Object { $_ -and (Test-Path $_) }
 
 if ($InnoCandidates.Count -gt 0) {
     $InnoCompiler = $InnoCandidates | Select-Object -First 1
     & $InnoCompiler "/DMyAppVersion=$Version" "installer\echandochal_pos.iss"
+    if ($LASTEXITCODE -ne 0) { throw "Falló la compilación del instalador." }
+    $Installer = Join-Path $ReleaseDirectory ("EchandoChalPOS-Setup-{0}.exe" -f $Version)
+    if (-not (Test-Path $Installer)) { throw "No se encontró el instalador generado." }
 }
 elseif ($RequireInstaller) {
-    throw "No se encontró Inno Setup 6; no fue posible crear el instalador."
+    throw "No se encontró Inno Setup 6 o 7; no fue posible crear el instalador."
 }
 else {
-    Write-Warning "No se encontró Inno Setup 6. Se generó únicamente la versión portable."
+    Write-Warning "No se encontró Inno Setup 6 o 7. Se generó únicamente la versión portable."
 }
 
 Write-Host ""
