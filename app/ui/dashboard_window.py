@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.dashboard_service import DashboardService
+from app.ui.theme import theme_colors
 from datetime import datetime
 from app.ui.widgets.annual_financial_chart import AnnualFinancialChart
 from app.ui.widgets.annual_commission_chart import AnnualCommissionChart
@@ -449,57 +450,60 @@ class DashboardWindow(QWidget):
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
 
-        self.setStyleSheet(
-            """
-            QLabel#dashboardTitle {
+        self.apply_theme(False)
+
+    def apply_theme(self, dark: bool) -> None:
+        """Actualiza las tarjetas y textos del Dashboard al cambiar Windows."""
+        c = theme_colors(dark)
+        self.setStyleSheet(f"""
+            QLabel#dashboardTitle {{
                 font-size: 26px;
                 font-weight: 700;
-                }
-            
-            QLabel#dashboardSubtitle {
+            }}
+            QLabel#dashboardSubtitle {{
                 font-size: 13px;
-                color: #666666;
-                }
-            QLabel#sectionTitle {
+                color: {c['muted']};
+            }}
+            QLabel#sectionTitle {{
                 font-size: 17px;
                 font-weight: 700;
                 margin-top: 5px;
-            }
-            
-            QFrame#statCard {
-                border: 1px solid #d9d9d9;
+            }}
+            QFrame#statCard {{
+                background-color: {c['card']};
+                border: 1px solid {c['border']};
                 border-radius: 10px;
-            }
-            
-            QLabel#cardTitle {
+            }}
+            QLabel#cardTitle {{
                 font-size: 32px;
                 font-weight: 700;
-                color: #FFFFFF;
-            }
-
-            QLabel#cardValue {
+                color: {c['text']};
+            }}
+            QLabel#cardValue {{
                 font-size: 25px;
                 font-weight: 700;
-                }
-
-            QLabel#cardSubtitle {
+                color: {c['text']};
+            }}
+            QLabel#cardSubtitle {{
                 font-size: 22px;
                 font-weight: 600;
-                color: #1F4E78;
-                }
-
-            QFrame#chartsPlaceholder {
-                border: 1px solid #d9d9d9;
+                color: {c['card_subtitle']};
+            }}
+            QFrame#chartsPlaceholder {{
+                border: 1px solid {c['border']};
                 border-radius: 10px;
                 margin-top: 4px;
-                }
-
-            QLabel#chartTitle {
+            }}
+            QLabel#chartTitle {{
                 font-size: 17px;
                 font-weight: 700;
-                }
-                """
-                )
+            }}
+        """)
+        if hasattr(self, "annual_chart"):
+            self.annual_chart.apply_theme(dark)
+        if hasattr(self, "commission_chart"):
+            self.commission_chart.apply_theme(dark)
+
     def _section_title(self, text: str) -> QLabel:
         label = QLabel(text)
         label.setObjectName("sectionTitle")
