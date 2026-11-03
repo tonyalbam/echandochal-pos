@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter
+from PySide6.QtGui import QPainter, QColor, QBrush
 from PySide6.QtCharts import (
     QBarCategoryAxis,
     QBarSeries,
@@ -9,6 +9,7 @@ from PySide6.QtCharts import (
     QValueAxis,
 )
 from PySide6.QtWidgets import QVBoxLayout, QWidget
+from app.ui.theme import theme_colors
 
 
 class AnnualCommissionChart(QWidget):
@@ -43,6 +44,7 @@ class AnnualCommissionChart(QWidget):
         )
 
         layout.addWidget(self.chart_view)
+        self._dark_mode = False
 
     def set_data(
         self,
@@ -102,3 +104,18 @@ class AnnualCommissionChart(QWidget):
         )
 
         self.chart_view.setChart(chart)
+        self.apply_theme(self._dark_mode)
+    def apply_theme(self, dark: bool) -> None:
+        """Los ejes, títulos y leyendas siguen el tema activo."""
+        self._dark_mode = bool(dark)
+        colors = theme_colors(dark)
+        chart = self.chart_view.chart()
+        foreground = QBrush(QColor(colors["text"]))
+        chart.setBackgroundBrush(QBrush(QColor(colors["surface"])))
+        chart.setPlotAreaBackgroundBrush(QBrush(QColor(colors["surface"])))
+        chart.setPlotAreaBackgroundVisible(True)
+        chart.setTitleBrush(foreground)
+        chart.legend().setLabelBrush(foreground)
+        for axis in chart.axes():
+            axis.setLabelsBrush(foreground)
+            axis.setTitleBrush(foreground)
