@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.supplier_service import SupplierService
+from app.ui.widgets.column_sort import SortableItem, install_table_sort, restore_table_sort
 
 
 class SupplierDialog(QDialog):
@@ -76,6 +77,7 @@ class SupplierWindow(QWidget):
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
+        install_table_sort(self.table)
         self.table.doubleClicked.connect(self._edit)
         layout.addWidget(self.table)
         buttons = QHBoxLayout()
@@ -100,6 +102,7 @@ class SupplierWindow(QWidget):
                 Qt.ItemDataRole.UserRole, supplier["id"]
             )
         self.table.resizeColumnsToContents()
+        restore_table_sort(self.table)
 
     def _selected(self) -> dict | None:
         row = self.table.currentRow()
