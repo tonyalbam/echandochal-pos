@@ -334,28 +334,67 @@ class ProductService:
 
     def get_categories(self) -> list[dict]:
         cursor = self.database.cursor()
-
-        cursor.execute(
-            """
-            SELECT id, nombre
-            FROM categorias
-            WHERE activo = 1
-              AND nombre IN (?, ?, ?, ?, ?, ?, ?, ?)
-            ORDER BY CASE nombre
-                WHEN 'Algodón' THEN 1
-                WHEN 'Acrílico' THEN 2
-                WHEN 'Combinado' THEN 3
-                WHEN 'Clases' THEN 4
-                WHEN 'Mercería' THEN 5
-                WHEN 'Pedidos personalizados' THEN 6
-                WHEN 'Talleres' THEN 7
-                WHEN 'Patrones' THEN 8
-            END
-            """,
-            self.ALLOWED_CATEGORIES,
-        )
-
+        cursor.execute("""
+            SELECT id, nombre FROM categorias WHERE activo = 1
+            ORDER BY nombre COLLATE NOCASE
+        """)
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_units(self) -> list[dict]:
+        cursor = self.database.cursor()
+        cursor.execute("""
+            SELECT id, nombre FROM unidades WHERE activo = 1
+            ORDER BY nombre COLLATE NOCASE
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+    @staticmethod
+    def _validate_catalog_name(name: str) -> str:
+        name = name.strip()
+        if not name or len(name) > 80:
+            raise ValueError("Escribe un nombre de 1 a 80 caracteres.")
+        return name
+
+    def add_catalog_option(self, kind: str, name: str) -> int:
+        """Activa una opción existente o incorpora una nueva."""
+        if kind not in ("categorias", "unidades"):
+            raise ValueError("Tipo de catálogo desconocido.")
+        name = self._validate_catalog_name(name)
+        cursor = self.database.cursor()
+        cursor.execute(
+            f"SELECT id, activo FROM {kind} "
+            "WHERE nombre = ? COLLATE NOCASE", (name,)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            if existing["activo"]:
+                raise ValueError("Esta opción ya existe en el catálogo.")
+            cursor.execute(
+                f"UPDATE {kind} SET activo = 1 WHERE id = ?",
+                (existing["id"],),
+            )
+            result = int(existing["id"])
+        else:
+            cursor.execute(
+                f"INSERT INTO {kind} (nombre, activo) VALUES (?, 1)",
+                (name,),
+            )
+            result = int(cursor.lastrowid)
+        self.database.commit()
+        return result
+
+    def remove_catalog_option(self, kind: str, option_id: int) -> None:
+        """Deshabilita para futuras altas sin borrar referencias históricas."""
+        if kind not in ("categorias", "unidades"):
+            raise ValueError("Tipo de catálogo desconocido.")
+        cursor = self.database.cursor()
+        cursor.execute(
+            f"UPDATE {kind} SET activo = 0 WHERE id = ? AND activo = 1",
+            (int(option_id),),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("La opción ya no está disponible.")
+        self.database.commit()
 
     def get_suppliers(self) -> list[dict]:
         cursor = self.database.cursor()
