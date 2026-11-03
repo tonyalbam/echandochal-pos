@@ -57,7 +57,7 @@ def theme_colors(dark: bool) -> dict[str, str]:
         "accent": "#2869A3", "selection": "#2F75B5",
         "selection_text": "#FFFFFF", "disabled": "#7C8795",
         "card": "#24507C", "card_text": "#FFFFFF", "card_subtitle": "#DCEBFC",
-        "row_alt": "#EDF3FA", "danger_row": "#F5A2A6",
+        "row_alt": "#EDF3FA", "danger_row": "#F1666D",
         "success": "#176638", "danger": "#A52222",
     }
 
