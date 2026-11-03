@@ -31,11 +31,11 @@ class ProductService:
         cursor = self.database.cursor()
 
         search = search.strip()
-        active_filter = "" if include_inactive else "WHERE p.activo = 1"
+        active_filter = "WHERE p.eliminado = 0" + ("" if include_inactive else " AND p.activo = 1")
 
         if search:
             pattern = f"%{search}%"
-            search_prefix = "WHERE" if include_inactive else "AND"
+            search_prefix = "AND"
 
             cursor.execute(
                 f"""
@@ -293,6 +293,44 @@ class ProductService:
         )
 
         self.database.commit()
+
+    def delete_product(self, product_id: int) -> None:
+        """Oculta un producto sin borrar sus referencias históricas.
+
+        Conservar el ID, código y precios es esencial para tickets, compras,
+        ventas, movimientos de inventario y reportes existentes.
+        """
+        cursor = self.database.cursor()
+        cursor.execute(
+            "SELECT id, codigo, nombre, eliminado FROM productos WHERE id = ?",
+            (int(product_id),),
+        )
+        product = cursor.fetchone()
+        if product is None or product["eliminado"]:
+            raise ValueError("El producto no existe o ya fue eliminado.")
+
+        try:
+            cursor.execute(
+                """UPDATE productos
+                   SET eliminado = 1, activo = 0,
+                       fecha_actualizacion = CURRENT_TIMESTAMP
+                   WHERE id = ? AND eliminado = 0""",
+                (int(product_id),),
+            )
+            cursor.execute(
+                """INSERT INTO auditoria
+                   (accion, modulo, referencia, detalles)
+                   VALUES (?, ?, ?, ?)""",
+                (
+                    "ELIMINAR_LOGICO", "PRODUCTOS", str(product["codigo"]),
+                    f"Producto retirado del catálogo: {product['nombre']}. "
+                    "Se conservaron los registros históricos.",
+                ),
+            )
+            self.database.commit()
+        except Exception:
+            self.database.rollback()
+            raise
 
     def get_categories(self) -> list[dict]:
         cursor = self.database.cursor()
