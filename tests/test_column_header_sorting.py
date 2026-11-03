@@ -126,6 +126,7 @@ class ColumnSortingTest(unittest.TestCase):
         self.assertLess(sort_value("$ 9.00", True), sort_value("$ 100.00", True))
         self.assertLess(sort_value("2026-01-01"), sort_value("2026-11-01"))
         self.assertLess(sort_value("0", True), sort_value("1", True))
+        self.assertLess(sort_value(0, True), sort_value(1, True))
 
     def test_sort_indicator_alternates_and_resets_for_new_column(self):
         table = QTableWidget()
