@@ -477,12 +477,12 @@ class DashboardWindow(QWidget):
             QLabel#cardTitle {{
                 font-size: 32px;
                 font-weight: 700;
-                color: {c['text']};
+                color: {c['card_text']};
             }}
             QLabel#cardValue {{
                 font-size: 25px;
                 font-weight: 700;
-                color: {c['text']};
+                color: {c['card_text']};
             }}
             QLabel#cardSubtitle {{
                 font-size: 22px;
