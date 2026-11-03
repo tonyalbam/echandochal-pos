@@ -85,7 +85,7 @@ class AnnualAnalyticsTests(unittest.TestCase):
             """INSERT INTO ventas(
                    folio, fecha, hora, subtotal, total, metodo_pago,
                    monto_comision)
-               VALUES ('V3', '2026-08-01', '10:00:00',
+               VALUES ('V3', '2026-08-15', '10:00:00',
                        60, 60, 'Efectivo', 0)"""
         )
         recent_sale = cursor.lastrowid
