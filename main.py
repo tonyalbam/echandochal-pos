@@ -8,25 +8,13 @@ from app.ui.data_setup_dialog import DataSetupDialog
 from app.database.schema import create_database
 from app.services.backup_service import BackupService
 from app.ui.main_window import MainWindow
+from app.ui.theme import WindowsThemeManager
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setStyleSheet(
-        """
-        QTableView {
-            qproperty-alternatingRowColors: true;
-            background-color: palette(window);
-            alternate-background-color: rgba(74, 144, 184, 45);
-            color: palette(window-text);
-            gridline-color: palette(mid);
-        }
-        QTableView::item:selected {
-            background-color: #2F75B5;
-            color: #FFFFFF;
-        }
-        """
-    )
+    app.setStyle('Fusion')
+    theme_manager = WindowsThemeManager(app)
 
     try:
         configured = load_data_directory()
@@ -52,6 +40,8 @@ def main() -> int:
         print(f"Aviso: no se pudo crear el respaldo automático: {error}")
 
     window = MainWindow(database)
+    theme_manager.theme_changed.connect(window.apply_theme)
+    window.apply_theme(theme_manager.dark_mode)
     window.show()
 
     exit_code = app.exec()
