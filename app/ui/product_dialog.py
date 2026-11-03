@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QListWidget,
     QLabel,
-    QWidget,
     QMessageBox,
     QVBoxLayout,
 )
@@ -136,6 +135,8 @@ class ProductDialog(QDialog):
 
         self._create_widgets()
         self._load_catalogs()
+        if not product:
+            self.unidad.setCurrentText("pieza")
 
         if product:
             self._load_product(product)
@@ -248,6 +249,12 @@ class ProductDialog(QDialog):
         index = self.categoria.findData(original_id)
         if index >= 0:
             self.categoria.setCurrentIndex(index)
+        elif self.product:
+            self.categoria.addItem(
+                self.product.get("categoria_nombre") or "Categoría anterior",
+                original_id,
+            )
+            self.categoria.setCurrentIndex(self.categoria.count() - 1)
 
     def _manage_units(self) -> None:
         original_unit = self.unidad.currentText()
@@ -258,6 +265,9 @@ class ProductDialog(QDialog):
         index = self.unidad.findText(original_unit)
         if index >= 0:
             self.unidad.setCurrentIndex(index)
+        elif self.product and original_unit:
+            self.unidad.addItem(original_unit)
+            self.unidad.setCurrentText(original_unit)
 
     def _load_catalogs(self) -> None:
         self.categoria.clear()
