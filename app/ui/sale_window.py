@@ -179,7 +179,7 @@ class SaleWindow(QWidget):
             "Escanea el código de barras o busca por código, nombre o marca; "
             "selecciona una coincidencia para agregarla."
         )
-        ayuda.setStyleSheet("color: #666;")
+        ayuda.setStyleSheet("color: palette(window-text);")
         layout.addWidget(ayuda)
 
         entrada_layout = QHBoxLayout()
@@ -230,7 +230,7 @@ class SaleWindow(QWidget):
         mode_help = QLabel(
             "Desactivada: cada unidad se muestra por separado."
         )
-        mode_help.setStyleSheet("color: #94A3B8;")
+        mode_help.setStyleSheet("color: palette(window-text);")
         mode_layout.addWidget(self.venta_voluminosa)
         mode_layout.addWidget(mode_help)
         mode_layout.addStretch()
