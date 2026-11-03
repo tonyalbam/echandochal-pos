@@ -39,8 +39,7 @@ class SortableItem(QTableWidgetItem):
 def next_sort(table, column):
     """Alterna ascendente / descendente; columna nueva comienza ascendente."""
     previous = getattr(table, "_heading_sort", None)
-    descending = bool(previous and previous == (column, False))
-    ascending = not descending
+    ascending = not (previous is not None and previous == (column, True))
     table._heading_sort = (column, ascending)
     order = (Qt.SortOrder.AscendingOrder if ascending
              else Qt.SortOrder.DescendingOrder)
