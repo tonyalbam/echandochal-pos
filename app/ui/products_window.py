@@ -24,6 +24,8 @@ from app.database.connection import Database
 from app.services.product_service import ProductService
 from app.services.label_service import LabelService
 from app.ui.product_dialog import ProductDialog
+from app.ui.quick_stock_dialog import QuickStockDialog
+from app.services.quick_stock_service import QuickStockService
 
 
 class ClearOnFocusLineEdit(QLineEdit):
@@ -187,6 +189,7 @@ class ProductsWindow(QWidget):
             "Nombre, código interno, código de barras o QR..."
         )
         self.search.textChanged.connect(self._load_products)
+        self.search.returnPressed.connect(self._scan_from_search)
 
         search_layout.addWidget(search_label)
         search_layout.addWidget(self.search)
@@ -291,6 +294,12 @@ class ProductsWindow(QWidget):
         )
         delete_button.clicked.connect(self._delete_selected)
 
+        quick_stock_button = QPushButton("Recepción rápida")
+        quick_stock_button.setToolTip(
+            "Escanea códigos existentes para sumar existencias y confirmar al final."
+        )
+        quick_stock_button.clicked.connect(self._open_quick_stock)
+
         label_button = QPushButton("Generar etiqueta")
         label_button.clicked.connect(self._generate_label)
 
@@ -298,6 +307,7 @@ class ProductsWindow(QWidget):
         buttons.addWidget(deactivate_button)
         buttons.addWidget(delete_button)
         buttons.addWidget(label_button)
+        buttons.addWidget(quick_stock_button)
         buttons.addStretch()
 
         layout.addLayout(buttons)
@@ -404,6 +414,28 @@ class ProductsWindow(QWidget):
             return None
 
         return item.data(Qt.ItemDataRole.UserRole)
+
+    def _scan_from_search(self) -> None:
+        """Un código exacto más Enter abre la ventana de recepción rápida."""
+        code = self.search.text().strip()
+        if not code:
+            return
+        try:
+            QuickStockService(self.database).find_scanned_product(code)
+        except ValueError:
+            # Un texto de búsqueda común no debe iniciar la recepción.
+            return
+        self._open_quick_stock(initial_code=code)
+
+    def _open_quick_stock(self, checked=False, initial_code: str = "") -> None:
+        # checked recibe el booleano de QPushButton.clicked.
+        dialog = QuickStockDialog(
+            self.database, initial_code=initial_code, parent=self
+        )
+        if dialog.exec() and dialog.saved:
+            self.search.clear()
+            self._load_products()
+        self.search.setFocus()
 
     def _new_product(self) -> None:
         dialog = ProductDialog(
