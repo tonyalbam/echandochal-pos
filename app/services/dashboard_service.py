@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from app.database.connection import Database
@@ -332,6 +332,166 @@ class DashboardService:
         )
 
         return report["mensual"]
+
+    def get_analytics_annual(self, year: int, today: date | None = None) -> dict:
+        """Indicadores visuales del año sin modificar datos.
+
+        Los importes y comisiones de la venta se prorratean por subtotal
+        entre partidas, evitando duplicar importes de cobros mixtos.
+        """
+        today = today or date.today()
+        if year < 2000 or year > 9999:
+            raise ValueError("Año inválido.")
+        cursor = self.database.cursor()
+        cursor.execute(
+            """SELECT v.id AS venta_id, v.fecha, v.total,
+                      v.monto_comision, dv.producto_id, dv.cantidad,
+                      dv.subtotal, dv.costo_unitario,
+                      p.nombre, p.codigo,
+                      COALESCE(NULLIF(TRIM(p.marca), ''), 'Sin marca') AS marca,
+                      COALESCE(c.nombre, 'Sin categoría') AS categoria
+               FROM detalle_venta dv
+               JOIN ventas v ON v.id = dv.venta_id
+               JOIN productos p ON p.id = dv.producto_id
+               LEFT JOIN categorias c ON c.id = p.categoria_id
+               WHERE v.cancelada = 0 AND v.fecha LIKE ?
+               ORDER BY v.id, dv.id""",
+            (f"{year}-%",),
+        )
+        lines = [dict(row) for row in cursor.fetchall()]
+        sale_subtotals = {}
+        for line in lines:
+            sid = line["venta_id"]
+            sale_subtotals[sid] = sale_subtotals.get(sid, 0) + float(line["subtotal"])
+
+        brands = {}
+        products = {}
+        for line in lines:
+            quantity = float(line["cantidad"])
+            product_id = int(line["producto_id"])
+            gross_total = sale_subtotals[line["venta_id"]]
+            ratio = float(line["subtotal"]) / gross_total if gross_total else 0.0
+            sales = float(line["total"]) * ratio
+            commission = float(line["monto_comision"]) * ratio
+            profit = sales - commission - quantity * float(line["costo_unitario"])
+            brands[line["marca"]] = brands.get(line["marca"], 0.0) + quantity
+            if product_id not in products:
+                products[product_id] = {
+                    "id": product_id, "codigo": line["codigo"],
+                    "nombre": line["nombre"], "categoria": line["categoria"],
+                    "unidades": 0.0, "ventas": 0.0, "utilidad": 0.0,
+                }
+            entry = products[product_id]
+            entry["unidades"] += quantity
+            entry["ventas"] += sales
+            entry["utilidad"] += profit
+
+        best_brand = None
+        if brands:
+            name, units = sorted(
+                brands.items(), key=lambda pair: (-pair[1], pair[0].casefold())
+            )[0]
+            best_brand = {"nombre": name, "unidades": round(units, 2)}
+
+        best_units = sorted(
+            products.values(),
+            key=lambda item: (-item["unidades"], -item["ventas"], item["nombre"]),
+        )
+        best_profit = sorted(
+            products.values(),
+            key=lambda item: (-item["utilidad"], item["nombre"]),
+        )
+        top_revenue = sorted(
+            products.values(),
+            key=lambda item: (-item["ventas"], item["nombre"]),
+        )[:5]
+        total_top_revenue = sum(row["ventas"] for row in top_revenue)
+        for item in top_revenue:
+            item["porcentaje"] = round(
+                100 * item["ventas"] / total_top_revenue, 1
+            ) if total_top_revenue > 0 else 0.0
+
+        cursor.execute(
+            """SELECT p.id, p.codigo, p.nombre, p.existencia, p.costo,
+                      p.precio, p.fecha_creacion,
+                      COALESCE(NULLIF(TRIM(p.marca), ''), 'Sin marca') AS marca,
+                      COALESCE(c.nombre, 'Sin categoría') AS categoria,
+                      MAX(CASE WHEN v.cancelada = 0 THEN v.fecha END) AS ultima_venta
+               FROM productos p
+               LEFT JOIN categorias c ON c.id = p.categoria_id
+               LEFT JOIN detalle_venta dv ON dv.producto_id = p.id
+               LEFT JOIN ventas v ON v.id = dv.venta_id
+               WHERE p.activo = 1 AND p.eliminado = 0 AND p.existencia > 0
+               GROUP BY p.id""",
+        )
+        aged = []
+        for row in cursor.fetchall():
+            created = date.fromisoformat(row["fecha_creacion"][:10])
+            last_sold = date.fromisoformat(row["ultima_venta"]) if row["ultima_venta"] else None
+            reference = last_sold or created
+            days = (today - reference).days
+            if days <= 90:
+                continue
+            aged.append({
+                "id": int(row["id"]), "codigo": row["codigo"],
+                "nombre": row["nombre"], "marca": row["marca"],
+                "categoria": row["categoria"], "existencia": float(row["existencia"]),
+                "costo": float(row["costo"]), "precio": float(row["precio"]),
+                "ultima_venta": row["ultima_venta"],
+                "dias_sin_venta": days,
+                "dias_en_inventario": (today - created).days,
+                "valor_inmovilizado": round(
+                    float(row["existencia"]) * float(row["costo"]), 2
+                ),
+            })
+        aged.sort(key=lambda row: (-row["dias_sin_venta"], row["nombre"]))
+        # Menor rotación: priorizar cero ventas anuales y después antigüedad.
+        cursor.execute(
+            """SELECT p.id, p.nombre, p.fecha_creacion,
+                      COALESCE(SUM(CASE WHEN v.cancelada = 0
+                          AND v.fecha LIKE ? THEN dv.cantidad ELSE 0 END), 0)
+                          AS unidades_anuales
+               FROM productos p
+               LEFT JOIN detalle_venta dv ON dv.producto_id = p.id
+               LEFT JOIN ventas v ON v.id = dv.venta_id
+               WHERE p.activo = 1 AND p.eliminado = 0 AND p.existencia > 0
+               GROUP BY p.id""",
+            (f"{year}-%",),
+        )
+        inventory = [
+            {
+                "id": int(row["id"]), "nombre": row["nombre"],
+                "unidades": float(row["unidades_anuales"]),
+                "dias": (today - date.fromisoformat(row["fecha_creacion"][:10])).days,
+            }
+            for row in cursor.fetchall()
+        ]
+        slowest = (
+            sorted(
+                inventory,
+                key=lambda row: (row["unidades"], -row["dias"], row["nombre"]),
+            )[0] if inventory else None
+        )
+
+        accumulated = 0.0
+        months = []
+        for month in range(1, 13):
+            # Igual fórmula de utilidad del Dashboard actual.
+            monthly = self.get_profit_for_period(f"{year}-{month:02d}")
+            accumulated = round(accumulated + monthly, 2)
+            months.append({"mes": month, "utilidad": monthly,
+                           "acumulada": accumulated})
+
+        return {
+            "year": year,
+            "marca_mas_vendida": best_brand,
+            "producto_mas_vendido": best_units[0] if best_units else None,
+            "producto_mas_rentable": best_profit[0] if best_profit else None,
+            "producto_menos_vendido": slowest,
+            "utilidad_acumulada": months,
+            "top_productos_ingresos": top_revenue,
+            "sin_venta_90_dias": aged,
+        }
 
     def export_annual_financial_report(
         self,
