@@ -219,6 +219,7 @@ class WindowsThemeManager(QObject):
         if dark == self.dark_mode:
             return
         self.dark_mode = dark
+        self.app.setProperty("echandochal_dark_mode", dark)
         colors = theme_colors(dark)
         self.app.setPalette(build_palette(colors))
         self.app.setStyleSheet(build_stylesheet(colors))
