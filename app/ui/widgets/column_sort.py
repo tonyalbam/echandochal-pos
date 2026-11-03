@@ -11,7 +11,7 @@ NUMBER_PATTERN = re.compile(r"[^0-9.+-]")
 
 
 def sort_value(value, numeric=False):
-    text = str(value or "").strip()
+    text = "" if value is None else str(value).strip()
     if numeric:
         cleaned = NUMBER_PATTERN.sub("", text)
         try:
