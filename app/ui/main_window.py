@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
         version = QLabel(
-            "Echando Chal POS\nv0.1.0"
+            "Echando Chal POS\nv1.0.0"
         )
 
         version.setAlignment(
