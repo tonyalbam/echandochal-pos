@@ -32,7 +32,8 @@ class SortableSaleItem(QTreeWidgetItem):
 
     def __lt__(self, other):
         tree = self.treeWidget()
-        column = tree.sortColumn() if tree is not None else 0
+        state = getattr(tree, "_heading_sort", None) if tree else None
+        column = state[0] if state is not None else (tree.sortColumn() if tree else 0)
         numeric = column in (4, 5, 6, 7)
         return sort_value(self.text(column), numeric) < sort_value(
             other.text(column), numeric
