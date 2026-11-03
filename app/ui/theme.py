@@ -66,6 +66,9 @@ def build_palette(colors: dict[str, str]) -> QPalette:
     palette = QPalette()
     roles = {
         QPalette.ColorRole.Window: "window",
+        QPalette.ColorRole.Mid: "border",
+        QPalette.ColorRole.Dark: "border",
+        QPalette.ColorRole.Light: "surface",
         QPalette.ColorRole.WindowText: "text",
         QPalette.ColorRole.Base: "input",
         QPalette.ColorRole.AlternateBase: "row_alt",
