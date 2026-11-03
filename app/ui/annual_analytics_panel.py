@@ -9,6 +9,7 @@ from app.ui.widgets.annual_analytics_charts import (
     CumulativeProfitChart, RevenueDonutChart,
 )
 from app.ui.theme import theme_colors
+from app.ui.widgets.column_sort import SortableItem, install_table_sort, restore_table_sort
 
 def _money(value: float) -> str:
     return f"$ {value:,.2f}"
@@ -138,6 +139,7 @@ class AnnualAnalyticsPanel(QWidget):
             QHeaderView.ResizeMode.ResizeToContents
         )
         self.stagnant.horizontalHeader().setStretchLastSection(True)
+        install_table_sort(self.stagnant)
         inventory_layout.addWidget(self.stagnant)
         outer.addWidget(inventory_frame)
 
@@ -195,7 +197,7 @@ class AnnualAnalyticsPanel(QWidget):
                 _money(product["valor_inmovilizado"]),
             )
             for col, value in enumerate(values):
-                cell = QTableWidgetItem(value)
+                cell = SortableItem(value, numeric=col in [4,6,7,8,9])
                 if col in (4, 6, 7, 8, 9):
                     cell.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight |
@@ -204,6 +206,7 @@ class AnnualAnalyticsPanel(QWidget):
                 self.stagnant.setItem(index, col, cell)
 
         self._render_performance(summary["utilidad_acumulada"])
+        restore_table_sort(self.stagnant)
         self._render_revenue_pie(summary["top_productos_ingresos"])
 
     def _render_performance(self, months: list[dict]) -> None:
