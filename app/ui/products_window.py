@@ -2,6 +2,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
+    QDialog,
+    QDialogButtonBox,
+    QCheckBox,
+    QScrollArea,
+    QComboBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -27,6 +32,111 @@ class ClearOnFocusLineEdit(QLineEdit):
     def focusInEvent(self, event) -> None:
         self.clear()
         super().focusInEvent(event)
+
+
+class BatchLabelDialog(QDialog):
+    """Selector independiente: no afecta la selección para editar productos."""
+
+    def __init__(self, products: list[dict], selected_ids: set[int], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Generar etiquetas de varios productos")
+        self.resize(640, 570)
+        layout = QVBoxLayout(self)
+        help_label = QLabel(
+            "Selecciona uno o varios productos. Puedes buscar por nombre, "
+            "código, marca o color. La exportación no modifica el inventario."
+        )
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Filtrar productos para seleccionar...")
+        layout.addWidget(self.search)
+        buttons = QHBoxLayout()
+        all_visible = QPushButton("Marcar visibles")
+        clear_visible = QPushButton("Desmarcar visibles")
+        buttons.addWidget(all_visible)
+        buttons.addWidget(clear_visible)
+        layout.addLayout(buttons)
+
+        self.product_checks: list[tuple[dict, QCheckBox]] = []
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        for product in products:
+            label = (
+                f"{product['codigo']} | {product['nombre']} | "
+                f"Color: {product.get('color') or 'Sin especificar'}"
+            )
+            checkbox = QCheckBox(label)
+            checkbox.setChecked(product["id"] in selected_ids)
+            content_layout.addWidget(checkbox)
+            self.product_checks.append((product, checkbox))
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        self.search.textChanged.connect(self._filter)
+        all_visible.clicked.connect(lambda: self._toggle_visible(True))
+        clear_visible.clicked.connect(lambda: self._toggle_visible(False))
+
+        content_row = QHBoxLayout()
+        content_row.addWidget(QLabel("Contenido:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(LabelService.FORMATS)
+        self.format_combo.setCurrentText("Ambos")
+        content_row.addWidget(self.format_combo, 1)
+        layout.addLayout(content_row)
+
+        output_row = QHBoxLayout()
+        output_row.addWidget(QLabel("Archivo:"))
+        self.output_combo = QComboBox()
+        self.output_combo.addItems(LabelService.OUTPUT_TYPES)
+        output_row.addWidget(self.output_combo, 1)
+        layout.addLayout(output_row)
+
+        self.selection_count = QLabel()
+        layout.addWidget(self.selection_count)
+        for _, checkbox in self.product_checks:
+            checkbox.toggled.connect(self._update_count)
+        self._update_count()
+        controls = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        controls.button(QDialogButtonBox.StandardButton.Ok).setText("Generar archivo")
+        controls.accepted.connect(self._accept_selection)
+        controls.rejected.connect(self.reject)
+        layout.addWidget(controls)
+
+    def _filter(self, query: str) -> None:
+        terms = query.casefold().split()
+        for product, checkbox in self.product_checks:
+            text = " ".join(str(product.get(field) or "") for field in
+                            ("codigo", "nombre", "marca", "color")).casefold()
+            checkbox.setVisible(all(term in text for term in terms))
+
+    def _toggle_visible(self, checked: bool) -> None:
+        for _, checkbox in self.product_checks:
+            if not checkbox.isHidden():
+                checkbox.setChecked(checked)
+
+    def _update_count(self, _checked=None) -> None:
+        self.selection_count.setText(
+            f"Productos seleccionados: {len(self.product_ids)}"
+        )
+
+    @property
+    def product_ids(self) -> list[int]:
+        return [int(product["id"]) for product, checkbox in self.product_checks
+                if checkbox.isChecked()]
+
+    def _accept_selection(self) -> None:
+        if not self.product_ids:
+            QMessageBox.information(self, "Sin productos",
+                "Selecciona al menos un producto para generar etiquetas.")
+            return
+        self.accept()
 
 
 class ProductsWindow(QWidget):
@@ -374,44 +484,38 @@ class ProductsWindow(QWidget):
         )
 
     def _generate_label(self) -> None:
-        product_id = self._selected_product_id()
-        if product_id is None:
-            QMessageBox.information(
-                self,
-                "Selecciona un producto",
-                "Selecciona el producto para generar su etiqueta.",
-            )
-            return
-
-        format_name, accepted = QInputDialog.getItem(
-            self,
-            "Formato de etiqueta",
-            "Contenido:",
-            LabelService.FORMATS,
-            2,
-            False,
+        # Todos los productos, incluso si hay un filtro de búsqueda activo.
+        products = self.service.list_products(include_inactive=True)
+        selected_id = self._selected_product_id()
+        dialog = BatchLabelDialog(
+            products, {int(selected_id)} if selected_id is not None else set(), self
         )
-        if not accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-
-        product = self.service.get_product(product_id)
+        output_type = dialog.output_combo.currentText()
+        extension = ".pdf" if output_type == "PDF" else ".docx"
+        filters = (
+            "Documento PDF (*.pdf)" if output_type == "PDF"
+            else "Documento Word (*.docx)"
+        )
         destination, _ = QFileDialog.getSaveFileName(
             self,
-            "Guardar etiqueta",
-            f"etiqueta_{product['codigo']}.pdf",
-            "Documento PDF (*.pdf)",
+            "Guardar etiquetas de productos",
+            "etiquetas_productos" + extension,
+            filters,
         )
         if not destination:
             return
         try:
-            output_path = self.label_service.generate_product_label(
-                product_id, destination, format_name
+            output_path = self.label_service.generate_product_labels(
+                dialog.product_ids, destination,
+                dialog.format_combo.currentText(), output_type,
             )
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, ImportError) as error:
             QMessageBox.critical(self, "No se pudo generar", str(error))
             return
         QMessageBox.information(
             self,
-            "Etiqueta generada",
-            f"La etiqueta se guardó correctamente en:\n{output_path}",
+            "Etiquetas generadas",
+            f"Se generaron {len(dialog.product_ids)} etiquetas en:\\n{output_path}",
         )
