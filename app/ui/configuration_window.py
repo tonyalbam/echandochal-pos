@@ -49,7 +49,7 @@ class ConfigurationWindow(QWidget):
 
         card = QFrame()
         card.setStyleSheet(
-            "QFrame { border: 1px solid #d9d9d9; border-radius: 10px; }"
+            "QFrame { border: 1px solid palette(mid); border-radius: 10px; }"
         )
         form = QFormLayout(card)
         form.setContentsMargins(24, 24, 24, 24)
