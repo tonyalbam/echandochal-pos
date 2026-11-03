@@ -143,6 +143,17 @@ class AnnualAnalyticsTests(unittest.TestCase):
         self.assertEqual(empty["valor_inmovilizado"], 90)
         self.assertGreater(empty["dias_sin_venta"], 90)
 
+    def test_stagnant_inventory_threshold_is_strictly_over_90_days(self):
+        # El 15 de agosto + 90 días = 13 de noviembre.
+        exact = self.service.get_analytics_annual(2026, date(2026, 11, 13))
+        self.assertNotIn(
+            "A", {row["codigo"] for row in exact["sin_venta_90_dias"]}
+        )
+        overdue = self.service.get_analytics_annual(2026, date(2026, 11, 14))
+        self.assertIn(
+            "A", {row["codigo"] for row in overdue["sin_venta_90_dias"]}
+        )
+
     def test_analytics_does_not_modify_data(self):
         cursor = self.db.cursor()
         before = [
