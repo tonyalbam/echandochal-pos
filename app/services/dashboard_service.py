@@ -466,21 +466,35 @@ class DashboardService:
             }
             for row in cursor.fetchall()
         ]
+        # Menor rotación: solo productos con 90 días o más desde su alta.
+        # Entre los elegibles, gana el de menos unidades vendidas en el año;
+        # los empates se resuelven por mayor antigüedad.
+        eligible_inventory = [
+            product for product in inventory if product["dias"] >= 90
+        ]
         slowest = (
             sorted(
-                inventory,
+                eligible_inventory,
                 key=lambda row: (row["unidades"], -row["dias"], row["nombre"]),
-            )[0] if inventory else None
+            )[0] if eligible_inventory else None
         )
 
         accumulated = 0.0
         months = []
         for month in range(1, 13):
-            # Igual fórmula de utilidad del Dashboard actual.
+            # Para el año en curso no proyectar utilidad hacia meses futuros.
+            # Mantener las doce etiquetas en el eje X sin trazar esos puntos.
+            if year > today.year or (year == today.year and month > today.month):
+                months.append({
+                    "mes": month, "utilidad": None, "acumulada": None
+                })
+                continue
             monthly = self.get_profit_for_period(f"{year}-{month:02d}")
             accumulated = round(accumulated + monthly, 2)
-            months.append({"mes": month, "utilidad": monthly,
-                           "acumulada": accumulated})
+            months.append({
+                "mes": month, "utilidad": monthly,
+                "acumulada": accumulated
+            })
 
         return {
             "year": year,
