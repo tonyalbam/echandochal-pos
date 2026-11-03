@@ -36,7 +36,7 @@ class LabelService:
         code.write(output, options={
             "module_width": 0.22, "module_height": 9,
             "quiet_zone": 2, "font_size": 8, "text_distance": 2,
-            "write_text": True, "dpi": 220,
+            "write_text": False, "dpi": 300,
         })
         output.seek(0)
         return output
@@ -99,11 +99,16 @@ class LabelService:
             img = PILImage.open(self._barcode_image(bar_value))
             max_width = min(58 * mm, width - 32 * mm) if mode == "Ambos" else width - 14 * mm
             barcode_width = min(max_width, 0.85 * width)
-            barcode_height = 21 * mm
+            barcode_height = 17 * mm
             left = x + 5 * mm if mode == "Ambos" else cx - barcode_width / 2
-            pdf.drawImage(ImageReader(img), left, y + 5 * mm,
+            pdf.drawImage(ImageReader(img), left, y + 10 * mm,
                           barcode_width, barcode_height, preserveAspectRatio=True,
                           anchor="c")
+            pdf.setFont("Helvetica", 7)
+            pdf.drawCentredString(
+                left + barcode_width / 2, y + 6 * mm,
+                self._fit_text(bar_value, barcode_width, "Helvetica", 7)
+            )
         if mode in ("Código QR", "Ambos"):
             img = PILImage.open(self._qr_image(qr_value))
             size = 23 * mm if mode == "Código QR" else 21 * mm
@@ -174,6 +179,7 @@ class LabelService:
                         self._qr_image(str(product.get("codigo_qr") or product["codigo"])),
                         width=Inches(0.78),
                     )
+                    cell.add_paragraph(str(product.get("codigo_barras") or product["codigo"]))
                 elif mode == "Código de barras":
                     p = cell.add_paragraph()
                     p.alignment = 1
@@ -181,6 +187,7 @@ class LabelService:
                         self._barcode_image(str(product.get("codigo_barras") or product["codigo"])),
                         width=Inches(2.9),
                     )
+                    cell.add_paragraph(str(product.get("codigo_barras") or product["codigo"]))
                 else:
                     p = cell.add_paragraph()
                     p.alignment = 1
