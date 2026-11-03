@@ -492,28 +492,37 @@ class ProductsWindow(QWidget):
             self._load_products()
             return
 
-        warning = (
-            f"¿Eliminar del catálogo el producto?\\n\\n"
-            f"{product['codigo']} | {product['nombre']}\\n\\n"
-            "Ya no aparecerá en Productos ni podrá utilizarse en nuevas "
-            "ventas o compras.\\n\\n"
-            "Se conservarán las ventas, compras y movimientos históricos. "
+        message = (
+            "¿Eliminar del catálogo el producto?\n\n"
+            f"{product['codigo']} | {product['nombre']}\n\n"
+            "Ya no aparecerá en Productos ni podrá utilizarse "
+            "en nuevas ventas o compras.\n\n"
+            "Se conservarán las ventas, compras y movimientos históricos.\n"
             "Esta acción no se puede deshacer desde la interfaz."
         )
+
+        confirm = QMessageBox(self)
+        confirm.setIcon(QMessageBox.Icon.Warning)
+        confirm.setWindowTitle("Confirmar eliminación de producto")
+        confirm.setText(message)
         if float(product.get("existencia") or 0) != 0:
-            warning += (
-                f"\\n\\nAtención: tiene una existencia de "
+            confirm.setInformativeText(
+                f"Atención: tiene una existencia de "
                 f"{float(product['existencia']):g} unidades. "
                 "Dejará de contabilizarse como inventario activo."
             )
 
-        reply = QMessageBox.question(
-            self, "Confirmar eliminación de producto",
-            warning,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+        confirm.setStyleSheet("QLabel { min-width: 420px; }")
+        yes_button = confirm.addButton(
+            "Sí, eliminar", QMessageBox.ButtonRole.YesRole
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        no_button = confirm.addButton(
+            "No, cancelar", QMessageBox.ButtonRole.NoRole
+        )
+        confirm.setDefaultButton(no_button)
+        confirm.setEscapeButton(no_button)
+        confirm.exec()
+        if confirm.clickedButton() is not yes_button:
             return
 
         try:
