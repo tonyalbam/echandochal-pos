@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QApplication,
     QMessageBox,
     QPushButton,
     QTabWidget,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.product_service import ProductService
 from app.services.label_service import LabelService
+from app.ui.theme import theme_colors
 from app.ui.product_dialog import ProductDialog
 from app.ui.quick_stock_dialog import QuickStockDialog
 from app.services.quick_stock_service import QuickStockService
@@ -349,7 +351,11 @@ class ProductsWindow(QWidget):
                     )
 
                 if not product["activo"]:
-                    item.setBackground(QColor("#F1666D"))
+                    dark = bool(
+                        QApplication.instance().property("echandochal_dark_mode")
+                    )
+                    item.setBackground(QColor(theme_colors(dark)["danger_row"]))
+                    item.setForeground(QColor(theme_colors(dark)["text"]))
 
                 self.table.setItem(row, column, item)
 
