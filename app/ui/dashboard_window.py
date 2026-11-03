@@ -19,6 +19,7 @@ from app.ui.theme import theme_colors
 from datetime import datetime
 from app.ui.widgets.annual_financial_chart import AnnualFinancialChart
 from app.ui.widgets.annual_commission_chart import AnnualCommissionChart
+from app.ui.annual_analytics_panel import AnnualAnalyticsPanel
 
 class StatCard(QFrame):
     """Tarjeta reutilizable para mostrar un indicador del Dashboard."""
@@ -142,6 +143,9 @@ class DashboardWindow(QWidget):
         operation_layout = add_tab("Operación")
         kpi_layout = add_tab("Indicadores clave")
         chart_tab_layout = add_tab("Gráficas anuales")
+        analytics_layout = add_tab("Analítica anual")
+        self.analytics_panel = AnnualAnalyticsPanel()
+        analytics_layout.addWidget(self.analytics_panel)
 
         # ---------------------------------------------------------
         # Ventas
@@ -503,6 +507,8 @@ class DashboardWindow(QWidget):
             self.annual_chart.apply_theme(dark)
         if hasattr(self, "commission_chart"):
             self.commission_chart.apply_theme(dark)
+        if hasattr(self, "analytics_panel"):
+            self.analytics_panel.apply_theme(dark)
 
     def _section_title(self, text: str) -> QLabel:
         label = QLabel(text)
@@ -610,6 +616,9 @@ class DashboardWindow(QWidget):
         self.commission_chart.set_data(
             annual_data,
             year,
+        )
+        self.analytics_panel.set_data(
+            self.service.get_analytics_annual(year)
         )
 
     def _set_product_ranking(
