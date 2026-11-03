@@ -130,8 +130,57 @@ class AnnualAnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(months[6]["acumulada"], 238)
         self.assertAlmostEqual(months[7]["acumulada"], 268)
         self.assertAlmostEqual(
-            months[-1]["acumulada"], self.service.get_profit_for_period("2026")
+            months[10]["acumulada"], self.service.get_profit_for_period("2026")
         )
+        self.assertIsNone(months[11]["acumulada"])
+        self.assertIsNone(months[11]["utilidad"])
+
+    def test_90_day_minimum_for_slowest_product_is_inclusive(self):
+        # Dado de alta hace 89 días: todavía no es elegible.
+        cursor = self.db.cursor()
+        cursor.execute(
+            """INSERT INTO productos
+               (codigo, nombre, existencia, fecha_creacion)
+               VALUES ('NEW', 'Sin ventas reciente', 5, '2026-08-05')"""
+        )
+        self.db.commit()
+        before = self.service.get_analytics_annual(2026, date(2026, 11, 2))
+        self.assertEqual(
+            before["producto_menos_vendido"]["nombre"], "Lana sin venta"
+        )
+        # Al cumplir exactamente 90 días ya puede competir por menor rotación.
+        exact = self.service.get_analytics_annual(2026, date(2026, 11, 3))
+        self.assertEqual(
+            exact["producto_menos_vendido"]["nombre"], "Lana sin venta"
+        )
+        self.assertGreaterEqual(exact["producto_menos_vendido"]["dias"], 90)
+
+    def test_slowest_returns_no_result_when_all_stock_is_new(self):
+        cursor = self.db.cursor()
+        cursor.execute(
+            "UPDATE productos SET fecha_creacion = '2026-10-28'"
+        )
+        self.db.commit()
+        result = self.service.get_analytics_annual(2026, date(2026, 11, 2))
+        self.assertIsNone(result["producto_menos_vendido"])
+
+    def test_monthly_chart_has_no_future_points_and_historical_year_is_complete(self):
+        current = self.service.get_analytics_annual(2026, date(2026, 11, 2))
+        self.assertEqual(len(current["utilidad_acumulada"]), 12)
+        self.assertTrue(all(
+            month["acumulada"] is None
+            for month in current["utilidad_acumulada"][11:]
+        ))
+        previous = self.service.get_analytics_annual(2026, date(2027, 1, 2))
+        self.assertTrue(all(
+            month["acumulada"] is not None
+            for month in previous["utilidad_acumulada"]
+        ))
+        future = self.service.get_analytics_annual(2027, date(2026, 11, 2))
+        self.assertTrue(all(
+            month["acumulada"] is None
+            for month in future["utilidad_acumulada"]
+        ))
 
     def test_old_inventory_detection_excludes_recent_and_no_stock(self):
         result = self.service.get_analytics_annual(2026, date(2026, 11, 2))
