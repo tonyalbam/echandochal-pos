@@ -46,7 +46,7 @@ def theme_colors(dark: bool) -> dict[str, str]:
             "muted": "#BBC6D6", "border": "#485365",
             "accent": "#448ED4", "selection": "#285F91",
             "selection_text": "#FFFFFF", "disabled": "#8792A3",
-            "card": "#253B59", "card_subtitle": "#DAE9FF",
+            "card": "#253B59", "card_text": "#FFFFFF", "card_subtitle": "#DAE9FF",
             "row_alt": "#242F3D", "danger_row": "#743940",
             "success": "#80D7A4", "danger": "#FF9C9C",
         }
@@ -56,7 +56,7 @@ def theme_colors(dark: bool) -> dict[str, str]:
         "muted": "#536174", "border": "#CAD3E0",
         "accent": "#2869A3", "selection": "#2F75B5",
         "selection_text": "#FFFFFF", "disabled": "#7C8795",
-        "card": "#E7EFF9", "card_subtitle": "#1F4E78",
+        "card": "#24507C", "card_text": "#FFFFFF", "card_subtitle": "#DCEBFC",
         "row_alt": "#EDF3FA", "danger_row": "#F5A2A6",
         "success": "#176638", "danger": "#A52222",
     }
