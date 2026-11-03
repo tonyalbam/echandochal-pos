@@ -1,3 +1,4 @@
+from app.ui.theme import theme_colors
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QDateEdit,
@@ -203,7 +204,15 @@ class CashClosingWindow(QWidget):
         self.cash_counted.setText(f"$ {cash['efectivo_contado']:,.2f}")
         self.cash_difference.setText(f"$ {cash['diferencia']:,.2f}")
         self.cash_status.setText(cash["estado"])
-        color = "#1B5E20" if cash["estado"] == "CUADRA" else "#B71C1C"
+        self._cash_is_balanced = cash["estado"] == "CUADRA"
+        self.apply_theme(getattr(self, "_dark_mode", False))
+
+    def apply_theme(self, dark: bool) -> None:
+        self._dark_mode = bool(dark)
+        if not hasattr(self, "_cash_is_balanced"):
+            return
+        colors = theme_colors(dark)
+        color = colors["success"] if self._cash_is_balanced else colors["danger"]
         self.cash_status.setStyleSheet(
             f"font-size: 16px; font-weight: bold; color: {color};"
         )
