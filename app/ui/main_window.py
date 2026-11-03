@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
         """Actualiza las vistas que mantienen reglas locales de color."""
         self.dashboard_window.apply_theme(dark)
         self.cash_closing_window.apply_theme(dark)
+        self.products_window._load_products()
 
     def _apply_settings(self, settings: dict) -> None:
         business_name = settings["nombre_negocio"]
