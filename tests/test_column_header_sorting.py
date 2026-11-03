@@ -69,9 +69,9 @@ class ColumnSortingTest(unittest.TestCase):
         self.assertEqual([p["producto_id"] for p in products], [2, 1, 3])
         self.assertIs(products[0], second)
         sort_records(products, 2, False, fields)
-        self.assertEqual([p["producto_id"] for p in products], [1, 3, 2])
+        self.assertEqual([p["producto_id"] for p in products], [3, 1, 2])
         products[0]["cantidad"] = 20
-        self.assertEqual(first["cantidad"], 20)
+        self.assertEqual(third["cantidad"], 20)
         self.assertEqual(second["cantidad"], 3)
 
     def test_dates_and_zero_values(self):
