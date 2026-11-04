@@ -17,6 +17,7 @@ from reportlab.platypus import (
 
 from app.database.connection import Database
 from app.services.configuration_service import ConfigurationService
+from app.services.petty_cash_service import PettyCashService
 
 
 class CashClosingService:
@@ -147,21 +148,22 @@ class CashClosingService:
         loose_change = round(max(0.0, float(loose_change)), 2)
         total_counted += loose_change
 
-        closing = self.get_daily_closing(closing_date)
-        expected = next(
-            payment["ventas"]
-            for payment in closing["formas_pago"]
-            if payment["metodo_pago"] == "Efectivo"
-        )
+        summary = PettyCashService(self.database).get_summary(closing_date)
+        expected_cents = summary["saldo_esperado_centavos"]
+        expected = expected_cents / 100
         difference = round(total_counted - expected, 2)
         return {
             "fecha": closing_date,
             "denominaciones": rows,
             "morralla": loose_change,
+            "saldo_inicial": summary["saldo_inicial_centavos"] / 100,
+            "ventas_efectivo": summary["ventas_efectivo_centavos"] / 100,
+            "gastos_efectivo": summary["gastos_centavos"] / 100,
             "efectivo_esperado": round(expected, 2),
             "efectivo_contado": round(total_counted, 2),
             "diferencia": difference,
-            "estado": "CUADRA" if difference == 0 else (
+            "estado": (
+                "CUADRA" if difference == 0 else
                 "SOBRANTE" if difference > 0 else "FALTANTE"
             ),
         }
