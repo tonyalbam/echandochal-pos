@@ -177,6 +177,36 @@ class PettyCashService:
                 raise ValueError("Cantidad de billetes fuera de rango.")
             counted += cents(Decimal(str(denom)) * number)
         counted += cents(loose_change)
+        # Si existe un cierre previo, no saltar fechas intermedias
+        # con entradas o salidas de efectivo aún sin cerrar.
+        previous = self._last_closing_before(day)
+        if previous:
+            cursor = self.database.cursor()
+            cursor.execute(
+                """SELECT MIN(v.fecha)
+                   FROM resumen_pagos_venta p
+                   JOIN ventas v ON v.id = p.venta_id
+                   WHERE v.fecha > ? AND v.fecha < ?
+                     AND v.cancelada = 0 AND p.metodo_pago = 'Efectivo'
+                     AND p.ventas > 0""",
+                (previous["fecha"], day),
+            )
+            pending_sale = cursor.fetchone()[0]
+            cursor.execute(
+                """SELECT MIN(fecha) FROM gastos_caja
+                   WHERE fecha > ? AND fecha < ? AND anulado = 0""",
+                (previous["fecha"], day),
+            )
+            pending_expense = cursor.fetchone()[0]
+            if pending_sale or pending_expense:
+                first_pending = min(
+                    value for value in (pending_sale, pending_expense)
+                    if value is not None
+                )
+                raise ValueError(
+                    f"Hay movimientos de efectivo del {first_pending} "
+                    "sin corte confirmado. Cierra ese día primero."
+                )
         summary = self.get_summary(day)
         expected = summary["saldo_esperado_centavos"]
         if expected < 0:
