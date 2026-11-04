@@ -1,4 +1,5 @@
-from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt
+from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt, QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QCheckBox,
     QCompleter,
@@ -38,6 +39,36 @@ class ClearOnFocusLineEdit(QLineEdit):
         super().focusInEvent(event)
 
 
+class PaymentAmountInput(QLineEdit):
+    """Entrada monetaria libre de flechas, vacía al iniciar y al enfocarse.
+
+    La ausencia de texto equivale a 0 solo para el cálculo provisional.
+    No se escribe ningún monto automáticamente en los campos.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setPlaceholderText("0.00")
+        self.setValidator(
+            QRegularExpressionValidator(
+                QRegularExpression(r"\\d{0,8}(?:\\.\\d{0,2})?"),
+                self,
+            )
+        )
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setMinimumHeight(38)
+        self.setToolTip("Escribe el monto en pesos, con hasta dos decimales.")
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        # No se selecciona el texto anterior: se elimina para captura nueva.
+        self.clear()
+
+    def amount(self) -> float:
+        text = self.text().strip()
+        return float(text) if text else 0.0
+
+
 class SalePaymentDialog(QDialog):
     """Captura los pagos de toda la venta y calcula el cambio."""
 
@@ -63,23 +94,22 @@ class SalePaymentDialog(QDialog):
         self.amounts = {}
         for name in SaleService.PAYMENT_METHODS:
             row = QHBoxLayout()
-            row.addWidget(QLabel("Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name))
-            field = QDoubleSpinBox()
-            field.setDecimals(2)
-            field.setRange(0, 99999999.99)
-            field.setPrefix("$ ")
-            field.setMinimumHeight(38)
-            field.valueChanged.connect(self._update)
+            row.addWidget(QLabel(
+                "Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name
+            ))
+            field = PaymentAmountInput(self)
+            field.setAccessibleName(
+                "Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name
+            )
+            field.textChanged.connect(self._update)
             row.addWidget(field)
             self.amounts[name] = field
             layout.addLayout(row)
         row = QHBoxLayout()
         row.addWidget(QLabel("Efectivo recibido"))
-        self.cash_received = QDoubleSpinBox()
-        self.cash_received.setDecimals(2)
-        self.cash_received.setRange(0, 99999999.99)
-        self.cash_received.setPrefix("$ ")
-        self.cash_received.valueChanged.connect(self._update)
+        self.cash_received = PaymentAmountInput(self)
+        self.cash_received.setAccessibleName("Efectivo recibido")
+        self.cash_received.textChanged.connect(self._update)
         row.addWidget(self.cash_received)
         layout.addLayout(row)
         self.remaining_label = QLabel()
@@ -96,22 +126,20 @@ class SalePaymentDialog(QDialog):
         controls.addWidget(cancel)
         controls.addWidget(self.confirm)
         layout.addLayout(controls)
-        self.amounts["Efectivo"].setValue(self.total)
-        self.cash_received.setValue(self.total)
         self._update()
 
     def _update(self):
         from app.services.payment_allocation import cents
-        amount_cents = sum(cents(field.value()) for field in self.amounts.values())
+        amount_cents = sum(cents(field.amount()) for field in self.amounts.values())
         remaining = cents(self.total) - amount_cents
-        received = cents(self.cash_received.value())
-        cash = cents(self.amounts["Efectivo"].value())
+        received = cents(self.cash_received.amount())
+        cash = cents(self.amounts["Efectivo"].amount())
         self.remaining_label.setText(
             f"{'Falta cobrar' if remaining >= 0 else 'Excede el total'}: "
             f"$ {abs(remaining) / 100:,.2f}"
         )
         self.change_label.setText(f"Cambio: $ {max(0, received - cash) / 100:,.2f}")
-        card = self.amounts["Mercado Libre"].value()
+        card = self.amounts["Mercado Libre"].amount()
         self.commission_label.setText(
             f"Comisión estimada de tarjeta ({self.commission_rate:g}%): "
             f"$ {round(card * self.commission_rate / 100, 2):,.2f}"
@@ -119,10 +147,10 @@ class SalePaymentDialog(QDialog):
         self.confirm.setEnabled(remaining == 0 and received >= cash)
 
     def _accept(self):
-        payments = {name: field.value() for name, field in self.amounts.items()}
+        payments = {name: field.amount() for name, field in self.amounts.items()}
         try:
             self.result = self.calculate_payment(
-                self.total, payments, self.cash_received.value(),
+                self.total, payments, self.cash_received.amount(),
                 self.commission_rate,
             )
         except ValueError as exc:
