@@ -209,7 +209,9 @@ def create_database(db: Database) -> None:
             tipo TEXT NOT NULL CHECK (tipo IN ('Gastos Fijos', 'Gastos variables')),
             descripcion TEXT NOT NULL CHECK (LENGTH(TRIM(descripcion)) > 0),
             monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
-            creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            anulado INTEGER NOT NULL DEFAULT 0 CHECK(anulado IN (0, 1)),
+            anulado_en TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_gastos_caja_fecha
             ON gastos_caja(fecha);
@@ -224,6 +226,17 @@ def create_database(db: Database) -> None:
             confirmado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
+    # Compatibilidad con instalaciones de prueba previas a anulación lógica.
+    columns = {
+        row[1] for row in cursor.execute("PRAGMA table_info(gastos_caja)")
+    }
+    if "anulado" not in columns:
+        cursor.execute(
+            "ALTER TABLE gastos_caja ADD COLUMN anulado INTEGER NOT NULL DEFAULT 0"
+        )
+    if "anulado_en" not in columns:
+        cursor.execute("ALTER TABLE gastos_caja ADD COLUMN anulado_en TEXT")
 
     # Catálogo configurable de unidades; conserva los textos ya utilizados.
     cursor.execute("""
