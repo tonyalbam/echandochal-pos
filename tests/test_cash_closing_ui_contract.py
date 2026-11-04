@@ -6,7 +6,8 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLineEdit, QSpinBox, QDoubleSpinBox
+from PySide6.QtWidgets import (QApplication, QLineEdit, QSpinBox, QDoubleSpinBox, QHeaderView)
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 
 from app.database.schema import create_database
@@ -44,6 +45,31 @@ class CashClosingUiContractTest(unittest.TestCase):
     def tearDown(self):
         self.window.close()
         self.database.connection.close()
+
+    def test_payment_summary_table_shows_all_rows_and_equal_columns(self):
+        table = self.window.table
+        self.app.processEvents()
+        self.assertEqual(table.rowCount(), 3)
+        self.assertEqual(table.columnCount(), 5)
+        self.assertEqual(
+            table.horizontalHeader().sectionResizeMode(4),
+            QHeaderView.ResizeMode.Stretch,
+        )
+        self.assertFalse(table.horizontalHeader().stretchLastSection())
+        self.assertEqual(
+            table.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        self.assertGreaterEqual(
+            table.viewport().height(),
+            3 * table.verticalHeader().defaultSectionSize(),
+        )
+        widths = [table.columnWidth(i) for i in range(5)]
+        self.assertLessEqual(max(widths) - min(widths), 4)
+        for index, name in enumerate(("Efectivo", "Transferencia", "Mercado Libre")):
+            self.assertEqual(table.item(index, 0).text(), name)
+            self.assertEqual(table.item(index, 1).text(), "0")
+            self.assertEqual(table.item(index, 2).text(), "$ 0.00")
 
     def test_all_inputs_are_empty_and_have_no_spin_arrows(self):
         fields = list(self.window.cash_inputs.values()) + [
