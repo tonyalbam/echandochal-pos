@@ -7,6 +7,8 @@ from datetime import date
 from app.database.schema import create_database
 from app.services.petty_cash_service import PettyCashService
 from app.services.cash_closing_service import CashClosingService
+from app.services.sale_service import SaleService
+from app.services.sale_history_service import SaleHistoryService
 
 
 class MemoryDatabase:
@@ -177,6 +179,70 @@ class PettyCashTest(unittest.TestCase):
             self.service.add_expense("2026-10-01", "Gastos Fijos", "Luz", 1)
         with self.assertRaises(ValueError):
             self.service.confirm_closing("2026-10-01", {}, 0)
+
+    def test_voided_expense_retains_audit_history(self):
+        self.add_sale("2026-10-01", 100, 100)
+        expense_id = self.service.add_expense(
+            "2026-10-01", "Gastos variables", "Caja", 25
+        )
+        self.service.delete_expense("2026-10-01", expense_id)
+        self.assertEqual(self.service.get_expenses("2026-10-01"), [])
+        audit = self.db.cursor().execute(
+            "SELECT anulado, anulado_en FROM gastos_caja WHERE id = ?",
+            (expense_id,),
+        ).fetchone()
+        self.assertEqual(audit["anulado"], 1)
+        self.assertIsNotNone(audit["anulado_en"])
+
+    def test_historical_cash_count_is_restored_for_reports(self):
+        self.add_sale("2026-10-01", 250, 250)
+        self.service.confirm_closing(
+            "2026-10-01", {("Billete", 200.0): 1}, 50
+        )
+        reconciliation = CashClosingService(self.db).calculate_cash_reconciliation(
+            "2026-10-01", {}, 0
+        )
+        self.assertEqual(reconciliation["efectivo_contado"], 250)
+        self.assertEqual(reconciliation["efectivo_esperado"], 250)
+        self.assertEqual(reconciliation["morralla"], 50)
+        denominations = {
+            row["denominacion"]: row["cantidad"]
+            for row in reconciliation["denominaciones"]
+        }
+        self.assertEqual(denominations[200], 1)
+        self.assertEqual(reconciliation["estado"], "CUADRA")
+
+    def test_sales_are_blocked_after_confirmed_today_close(self):
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.service.confirm_closing(today, {}, 0)
+        self.db.cursor().execute(
+            """INSERT INTO productos (codigo, nombre, precio, existencia)
+               VALUES ('CASH-LOCK', 'Caja cerrada', 10, 2)"""
+        )
+        self.db.commit()
+        with self.assertRaisesRegex(ValueError, "ya está confirmado"):
+            SaleService(self.db).create_sale(
+                [{"producto_id": 1, "cantidad": 1, "precio_unitario": 10}],
+                payment_method="Efectivo",
+            )
+        self.assertEqual(
+            self.db.cursor().execute("SELECT COUNT(*) FROM ventas").fetchone()[0], 0
+        )
+
+    def test_cancellation_does_not_change_confirmed_cash(self):
+        cursor = self.db.cursor()
+        cursor.execute(
+            """INSERT INTO ventas
+               (folio, fecha, hora, total, metodo_pago, total_neto)
+               VALUES ('EARLY', '2026-10-01', '10:00:00', 50, 'Efectivo', 50)"""
+        )
+        self.db.commit()
+        self.service.confirm_closing(
+            "2026-10-01", {("Billete", 50.0): 1}, 0
+        )
+        with self.assertRaisesRegex(ValueError, "corte de caja confirmado"):
+            SaleHistoryService(self.db).cancel_sale(1)
 
     def test_schema_migration_is_idempotent(self):
         create_database(self.db)
