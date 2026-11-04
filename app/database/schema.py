@@ -223,9 +223,23 @@ def create_database(db: Database) -> None:
             gastos_centavos INTEGER NOT NULL CHECK (gastos_centavos >= 0),
             saldo_esperado_centavos INTEGER NOT NULL CHECK (saldo_esperado_centavos >= 0),
             saldo_contado_centavos INTEGER NOT NULL CHECK (saldo_contado_centavos >= 0),
+            conteos_json TEXT NOT NULL DEFAULT '{}',
+            morralla_centavos INTEGER NOT NULL DEFAULT 0,
             confirmado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
+    closing_columns = {
+        row[1] for row in cursor.execute("PRAGMA table_info(cierres_caja)")
+    }
+    if "conteos_json" not in closing_columns:
+        cursor.execute(
+            "ALTER TABLE cierres_caja ADD COLUMN conteos_json TEXT NOT NULL DEFAULT '{}'"
+        )
+    if "morralla_centavos" not in closing_columns:
+        cursor.execute(
+            "ALTER TABLE cierres_caja ADD COLUMN morralla_centavos INTEGER NOT NULL DEFAULT 0"
+        )
 
     # Compatibilidad con instalaciones de prueba previas a anulación lógica.
     columns = {
