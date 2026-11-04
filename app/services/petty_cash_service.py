@@ -51,7 +51,7 @@ class PettyCashService:
         # incrementa el saldo de la caja en exactamente $50.
         cursor = self.database.cursor()
         cursor.execute(
-            """SELECT COALESCE(SUM(p.ventas), 0)
+            """SELECT COALESCE(ROUND(SUM(p.ventas), 2), 0)
                FROM resumen_pagos_venta p
                JOIN ventas v ON v.id = p.venta_id
                WHERE v.fecha = ? AND v.cancelada = 0
