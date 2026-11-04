@@ -3,6 +3,8 @@ from PySide6.QtCore import QDate, Qt, QRegularExpression
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDateEdit,
+    QComboBox,
+    QScrollArea,
     QLineEdit,
     QFileDialog,
     QGridLayout,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.cash_closing_service import CashClosingService
+from app.services.petty_cash_service import PettyCashService
 
 
 class ClearOnFocusAmount(QLineEdit):
@@ -60,13 +63,21 @@ class CashClosingWindow(QWidget):
     def __init__(self, database: Database, parent=None) -> None:
         super().__init__(parent)
         self.service = CashClosingService(database)
+        self.petty_cash = PettyCashService(database)
         self._create_ui()
         self.refresh()
 
     def _create_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(25, 20, 25, 25)
         layout.setSpacing(14)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
         title = QLabel("Corte diario")
         title.setStyleSheet("font-size: 28px; font-weight: bold;")
@@ -167,6 +178,68 @@ class CashClosingWindow(QWidget):
             value.setStyleSheet("font-size: 16px; font-weight: bold;")
             cash_layout.addWidget(value, summary_row, column * 2 + 1)
         layout.addWidget(cash_group)
+
+        # Registro de retiros de efectivo; no altera las compras ni las ventas.
+        expenses_group = QGroupBox("Gastos operativos de caja chica")
+        expenses_layout = QVBoxLayout(expenses_group)
+        expenses_form = QHBoxLayout()
+        self.expense_type = QComboBox()
+        self.expense_type.addItems(self.petty_cash.EXPENSE_TYPES)
+        self.expense_description = QLineEdit()
+        self.expense_description.setPlaceholderText("Descripción del gasto")
+        self.expense_description.setMaxLength(250)
+        self.expense_amount = ClearOnFocusAmount(decimals=2)
+        self.expense_amount.setPlaceholderText("Monto en efectivo")
+        self.add_expense_button = QPushButton("Registrar gasto")
+        self.add_expense_button.clicked.connect(self._register_expense)
+        expenses_form.addWidget(QLabel("Tipo:"))
+        expenses_form.addWidget(self.expense_type)
+        expenses_form.addWidget(QLabel("Descripción:"))
+        expenses_form.addWidget(self.expense_description, 1)
+        expenses_form.addWidget(QLabel("Monto:"))
+        expenses_form.addWidget(self.expense_amount)
+        expenses_form.addWidget(self.add_expense_button)
+        expenses_layout.addLayout(expenses_form)
+        self.expenses_table = QTableWidget(0, 4)
+        self.expenses_table.setHorizontalHeaderLabels(
+            ["ID", "Tipo", "Descripción", "Monto retirado"]
+        )
+        self.expenses_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.expenses_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.expenses_table.setColumnHidden(0, True)
+        self.expenses_table.horizontalHeader().setStretchLastSection(True)
+        self.expenses_table.setMinimumHeight(135)
+        expenses_layout.addWidget(self.expenses_table)
+        expense_actions = QHBoxLayout()
+        self.remove_expense_button = QPushButton("Eliminar gasto seleccionado")
+        self.remove_expense_button.clicked.connect(self._remove_expense)
+        expense_actions.addWidget(self.remove_expense_button)
+        expense_actions.addStretch()
+        expenses_layout.addLayout(expense_actions)
+        layout.addWidget(expenses_group)
+
+        carryover_group = QGroupBox("Control de caja chica y confirmación del corte")
+        carryover_layout = QGridLayout(carryover_group)
+        self.opening_cash = QLabel("$ 0.00")
+        self.cash_sales = QLabel("$ 0.00")
+        self.operating_expenses = QLabel("$ 0.00")
+        self.closing_state = QLabel("Corte pendiente de confirmación")
+        for index, (label, widget) in enumerate((
+            ("Saldo inicial (último corte confirmado)", self.opening_cash),
+            ("Entradas por ventas en efectivo (cambio descontado)", self.cash_sales),
+            ("Salidas por gastos operativos", self.operating_expenses),
+            ("Estado del corte", self.closing_state),
+        )):
+            carryover_layout.addWidget(QLabel(label), index, 0)
+            carryover_layout.addWidget(widget, index, 1)
+        self.confirm_closing_button = QPushButton("Confirmar el corte diario")
+        self.confirm_closing_button.clicked.connect(self._confirm_closing)
+        carryover_layout.addWidget(self.confirm_closing_button, 4, 0, 1, 2)
+        layout.addWidget(carryover_group)
         layout.addStretch()
 
     def _selected_date(self) -> str:
@@ -206,7 +279,118 @@ class CashClosingWindow(QWidget):
         self.values["productos_vendidos"].setText(
             f"{data['productos_vendidos']:g}"
         )
+        self._refresh_petty_cash()
         self._update_cash_reconciliation()
+
+    def _refresh_petty_cash(self) -> None:
+        summary = self.petty_cash.get_summary(self._selected_date())
+        self.opening_cash.setText(
+            f"$ {summary['saldo_inicial_centavos'] / 100:,.2f}"
+        )
+        self.cash_sales.setText(
+            f"$ {summary['ventas_efectivo_centavos'] / 100:,.2f}"
+        )
+        self.operating_expenses.setText(
+            f"$ {summary['gastos_centavos'] / 100:,.2f}"
+        )
+        self.expenses_table.setRowCount(0)
+        for index, expense in enumerate(summary["gastos"]):
+            self.expenses_table.insertRow(index)
+            entries = (
+                expense["id"], expense["tipo"], expense["descripcion"],
+                f"$ {expense['monto_centavos'] / 100:,.2f}"
+            )
+            for col, value in enumerate(entries):
+                self.expenses_table.setItem(index, col, QTableWidgetItem(str(value)))
+        closed = summary["cierre"] is not None
+        self.closing_state.setText(
+            f"CONFIRMADO: {summary['cierre']['confirmado_en']}"
+            if closed else "Pendiente de confirmación"
+        )
+        self.confirm_closing_button.setEnabled(not closed)
+        self.add_expense_button.setEnabled(not closed)
+        self.remove_expense_button.setEnabled(not closed)
+        self.expense_type.setEnabled(not closed)
+        self.expense_description.setEnabled(not closed)
+        self.expense_amount.setEnabled(not closed)
+        for field in self.cash_inputs.values():
+            field.setReadOnly(closed)
+        self.loose_change.setReadOnly(closed)
+
+    def _register_expense(self) -> None:
+        try:
+            self.petty_cash.add_expense(
+                self._selected_date(), self.expense_type.currentText(),
+                self.expense_description.text(), self.expense_amount.amount()
+            )
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "No se pudo registrar el gasto", str(error))
+            return
+        self.expense_description.clear()
+        self.expense_amount.clear()
+        self._refresh_petty_cash()
+        self._update_cash_reconciliation()
+
+    def _remove_expense(self) -> None:
+        row = self.expenses_table.currentRow()
+        if row < 0:
+            QMessageBox.information(
+                self, "Selecciona un gasto", "Selecciona el gasto que deseas eliminar."
+            )
+            return
+        expense_id = int(self.expenses_table.item(row, 0).text())
+        reply = QMessageBox.question(
+            self, "Eliminar gasto",
+            "¿Eliminar este gasto antes de confirmar el corte?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.petty_cash.delete_expense(self._selected_date(), expense_id)
+        except ValueError as error:
+            QMessageBox.warning(self, "No se pudo eliminar", str(error))
+            return
+        self._refresh_petty_cash()
+        self._update_cash_reconciliation()
+
+    def _confirm_closing(self) -> None:
+        cash = self.service.calculate_cash_reconciliation(
+            self._selected_date(), self._cash_counts(), self.loose_change.amount()
+        )
+        if cash["estado"] != "CUADRA":
+            QMessageBox.warning(
+                self, "El arqueo no cuadra",
+                "El efectivo contado debe coincidir con el saldo esperado "
+                "antes de confirmar el corte. Revisa billetes, morralla y gastos."
+            )
+            return
+        reply = QMessageBox.question(
+            self, "Confirmar el corte diario",
+            f"¿Confirmar el corte de {self._selected_date()} por "
+            f"$ {cash['efectivo_contado']:,.2f}?\n\n"
+            "Este monto será el saldo inicial de la caja chica para el "
+            "siguiente día. Una vez confirmado no se podrán agregar ni "
+            "eliminar gastos de este día.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.petty_cash.confirm_closing(
+                self._selected_date(), self._cash_counts(), self.loose_change.amount()
+            )
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "No se pudo cerrar", str(error))
+            return
+        self._refresh_petty_cash()
+        QMessageBox.information(
+            self, "Corte confirmado",
+            "Corte guardado. El efectivo contado se trasladará como saldo "
+            "inicial al siguiente día."
+        )
 
     def _cash_counts(self) -> dict[tuple[str, float], int]:
         return {
@@ -259,7 +443,7 @@ class CashClosingWindow(QWidget):
     def _run_export(self, exporter, date: str, destination: str) -> None:
         try:
             output_path = exporter(
-                date, destination, self._cash_counts(), self.loose_change.value()
+                date, destination, self._cash_counts(), self.loose_change.amount()
             )
         except (OSError, ValueError) as error:
             QMessageBox.critical(self, "No se pudo exportar", str(error))
