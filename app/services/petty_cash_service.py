@@ -59,10 +59,43 @@ class PettyCashService:
         )
         return cents(cursor.fetchone()[0])
 
+    def get_initial_fund(self):
+        cursor = self.database.cursor()
+        cursor.execute("SELECT * FROM fondo_inicial_caja WHERE id = 1")
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def register_initial_fund(self, day, amount):
+        """Ingreso inicial único, documentado y anterior al primer cierre."""
+        day = self._date(day)
+        amount_cents = cents(amount)
+        if amount_cents <= 0:
+            raise ValueError("El fondo inicial debe ser mayor a cero.")
+        if day > date.today().isoformat():
+            raise ValueError("No puedes registrar un fondo en una fecha futura.")
+        if self.get_initial_fund():
+            raise ValueError("El fondo inicial ya está registrado.")
+        cursor = self.database.cursor()
+        cursor.execute("SELECT 1 FROM cierres_caja LIMIT 1")
+        if cursor.fetchone():
+            raise ValueError(
+                "Ya existe un corte confirmado. El fondo inicial no puede cambiarse."
+            )
+        cursor.execute(
+            "INSERT INTO fondo_inicial_caja (id, fecha, monto_centavos) "
+            "VALUES (1, ?, ?)", (day, amount_cents)
+        )
+        self.database.commit()
+        return amount_cents
+
     def get_summary(self, day):
         day = self._date(day)
         last = self._last_closing_before(day)
-        opening = int(last["saldo_contado_centavos"]) if last else 0
+        fund = self.get_initial_fund()
+        opening = int(last["saldo_contado_centavos"]) if last else (
+            int(fund["monto_centavos"])
+            if fund and day >= fund["fecha"] else 0
+        )
         sales = self._cash_sales_cents(day)
         expenses = self.get_expenses(day)
         withdrawals = sum(item["monto_centavos"] for item in expenses)
@@ -70,6 +103,7 @@ class PettyCashService:
         return {
             "fecha": day, "saldo_inicial_centavos": opening,
             "cierre_anterior": last["fecha"] if last else None,
+            "fondo_inicial": fund,
             "ventas_efectivo_centavos": sales,
             "gastos_centavos": withdrawals,
             "saldo_esperado_centavos": expected,
