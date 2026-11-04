@@ -424,6 +424,7 @@ class CashClosingWindow(QWidget):
             QMessageBox.warning(self, "No se pudo cerrar", str(error))
             return
         self._refresh_petty_cash()
+        self._update_cash_reconciliation()
         QMessageBox.information(
             self, "Corte confirmado",
             "Corte guardado. El efectivo contado se trasladará como saldo "
@@ -446,8 +447,22 @@ class CashClosingWindow(QWidget):
         self.cash_expected.setText(f"$ {cash['efectivo_esperado']:,.2f}")
         self.cash_counted.setText(f"$ {cash['efectivo_contado']:,.2f}")
         self.cash_difference.setText(f"$ {cash['diferencia']:,.2f}")
-        self.cash_status.setText(cash["estado"])
-        self._cash_is_balanced = cash["estado"] == "CUADRA"
+        closing = self.petty_cash.get_closing(self._selected_date())
+        if closing:
+            # Los campos se mantienen vacíos/solo lectura en fechas cerradas.
+            # Mostrar el corte guardado, no el "cero" del formulario vacío.
+            self.cash_expected.setText(
+                f"$ {closing['saldo_esperado_centavos'] / 100:,.2f}"
+            )
+            self.cash_counted.setText(
+                f"$ {closing['saldo_contado_centavos'] / 100:,.2f}"
+            )
+            self.cash_difference.setText("$ 0.00")
+            self.cash_status.setText("CONFIRMADO")
+            self._cash_is_balanced = True
+        else:
+            self.cash_status.setText(cash["estado"])
+            self._cash_is_balanced = cash["estado"] == "CUADRA"
         self.apply_theme(getattr(self, "_dark_mode", False))
 
     def apply_theme(self, dark: bool) -> None:
