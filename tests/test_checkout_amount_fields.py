@@ -40,6 +40,28 @@ class CheckoutInputTest(unittest.TestCase):
         self.assertFalse(self.dialog.confirm.isEnabled())
         self.assertIn("$ 350.00", self.dialog.remaining_label.text())
 
+    def test_currency_prefix_visible_and_inputs_have_matching_geometry(self):
+        fields = list(self.dialog.amounts.values()) + [
+            self.dialog.cash_received
+        ]
+        self.app.processEvents()
+        left_edges = {field.geometry().x() for field in fields}
+        widths = {field.width() for field in fields}
+        self.assertEqual(len(left_edges), 1)
+        self.assertEqual(len(widths), 1)
+        for field in fields:
+            with self.subTest(field=field.accessibleName()):
+                self.assertEqual(field.currency_prefix.text(), "$")
+                self.assertTrue(field.currency_prefix.isVisible())
+                self.assertGreater(field.textMargins().left(), 0)
+                self.assertEqual(field.text(), "")
+                field.setFocus()
+                QTest.keyClicks(field, "89.50")
+                self.assertEqual(field.text(), "89.50")
+                self.assertEqual(field.amount(), 89.5)
+                self.assertTrue(field.currency_prefix.isVisible())
+                field.clear()
+
     def test_focusing_existing_entry_clears_entire_amount(self):
         cash = self.dialog.amounts["Efectivo"]
         transfer = self.dialog.amounts["Transferencia"]
