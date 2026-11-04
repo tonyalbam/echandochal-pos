@@ -248,6 +248,25 @@ class PettyCashTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "corte de caja confirmado"):
             SaleHistoryService(self.db).cancel_sale(1)
 
+    def test_cannot_skip_unclosed_day_with_cash_sales(self):
+        self.add_sale("2026-10-01", 100, 100)
+        self.service.confirm_closing(
+            "2026-10-01", {("Billete", 100.0): 1}, 0
+        )
+        self.add_sale("2026-10-02", 20, 20)
+        with self.assertRaisesRegex(ValueError, "2026-10-02"):
+            self.service.confirm_closing(
+                "2026-10-03", {("Billete", 100.0): 1}, 0
+            )
+        self.service.confirm_closing(
+            "2026-10-02", {("Billete", 100.0): 1,
+                           ("Billete", 20.0): 1}, 0
+        )
+        self.assertEqual(
+            self.service.get_summary("2026-10-03")["saldo_inicial_centavos"],
+            12000
+        )
+
     def test_schema_migration_is_idempotent(self):
         create_database(self.db)
         self.add_sale("2026-10-01", 100, 100)
