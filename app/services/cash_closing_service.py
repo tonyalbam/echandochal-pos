@@ -274,6 +274,30 @@ class CashClosingService:
             sheet.cell(row_number, 2, value).number_format = format_code
             row_number += 1
 
+        # Resumen y detalle de caja chica en el mismo reporte financiero.
+        from app.services.petty_cash_service import PettyCashService
+        summary = PettyCashService(self.database).get_summary(closing_date)
+        petty_start = row_number + 3
+        sheet.cell(petty_start, 1, "Caja chica: entradas y salidas").font = bold
+        for offset, (label, value) in enumerate((
+            ("Saldo inicial", summary["saldo_inicial_centavos"] / 100),
+            ("Ventas en efectivo (cambio descontado)",
+             summary["ventas_efectivo_centavos"] / 100),
+            ("Gastos operativos", summary["gastos_centavos"] / 100),
+            ("Saldo esperado", summary["saldo_esperado_centavos"] / 100),
+        ), start=1):
+            sheet.cell(petty_start + offset, 1, label)
+            sheet.cell(petty_start + offset, 2, value).number_format = money
+        expense_start = petty_start + 6
+        for col, header in enumerate(
+            ("Tipo de gasto", "Descripción", "Monto retirado"), start=1
+        ):
+            sheet.cell(expense_start, col, header).font = bold
+        for index, expense in enumerate(summary["gastos"], start=expense_start + 1):
+            sheet.cell(index, 1, expense["tipo"])
+            sheet.cell(index, 2, expense["descripcion"])
+            sheet.cell(index, 3, expense["monto_centavos"] / 100).number_format = money
+
         widths = (28, 18, 18, 18, 18)
         for column, width in enumerate(widths, start=1):
             sheet.column_dimensions[chr(64 + column)].width = width
@@ -389,6 +413,45 @@ class CashClosingService:
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ]))
         story.append(reconciliation)
+        from app.services.petty_cash_service import PettyCashService
+        summary = PettyCashService(self.database).get_summary(closing_date)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("<b>Caja chica: entradas y salidas</b>",
+                               styles["Heading2"]))
+        petty_data = [
+            ["Saldo inicial", f"$ {summary['saldo_inicial_centavos'] / 100:,.2f}"],
+            ["Ventas en efectivo (cambio descontado)",
+             f"$ {summary['ventas_efectivo_centavos'] / 100:,.2f}"],
+            ["Gastos operativos", f"$ {summary['gastos_centavos'] / 100:,.2f}"],
+            ["Saldo esperado", f"$ {summary['saldo_esperado_centavos'] / 100:,.2f}"],
+        ]
+        petty_table = Table(petty_data, colWidths=[95 * mm, 40 * mm])
+        petty_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#D9EAF7")),
+        ]))
+        story.append(petty_table)
+        if summary["gastos"]:
+            story.append(Spacer(1, 4 * mm))
+            expense_data = [["Tipo", "Descripción", "Monto"]]
+            for expense in summary["gastos"]:
+                expense_data.append([
+                    expense["tipo"], expense["descripcion"],
+                    f"$ {expense['monto_centavos'] / 100:,.2f}",
+                ])
+            expense_table = Table(
+                expense_data, colWidths=[38 * mm, 100 * mm, 35 * mm],
+                repeatRows=1,
+            )
+            expense_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ALIGN", (2, 1), (2, -1), "RIGHT"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ]))
+            story.append(expense_table)
 
         document = SimpleDocTemplate(
             str(output_path), pagesize=letter,
