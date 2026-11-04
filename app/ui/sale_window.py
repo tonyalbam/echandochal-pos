@@ -48,7 +48,7 @@ class PaymentAmountInput(QLineEdit):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setPlaceholderText("0.00")
+        self.setPlaceholderText("Escribe el monto")
         self.setValidator(
             QRegularExpressionValidator(
                 QRegularExpression(r"\\d{0,8}(?:\\.\\d{0,2})?"),
