@@ -193,6 +193,31 @@ def create_database(db: Database) -> None:
         """
     )
 
+    # Caja chica: efectivo arrastrado y retiros diarios auditables.
+    # Las tablas nuevas no alteran ni migran registros históricos de ventas.
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS gastos_caja (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TEXT NOT NULL,
+            tipo TEXT NOT NULL CHECK (tipo IN ('Gastos Fijos', 'Gastos variables')),
+            descripcion TEXT NOT NULL CHECK (LENGTH(TRIM(descripcion)) > 0),
+            monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
+            creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_gastos_caja_fecha
+            ON gastos_caja(fecha);
+
+        CREATE TABLE IF NOT EXISTS cierres_caja (
+            fecha TEXT PRIMARY KEY,
+            saldo_inicial_centavos INTEGER NOT NULL CHECK (saldo_inicial_centavos >= 0),
+            ventas_efectivo_centavos INTEGER NOT NULL CHECK (ventas_efectivo_centavos >= 0),
+            gastos_centavos INTEGER NOT NULL CHECK (gastos_centavos >= 0),
+            saldo_esperado_centavos INTEGER NOT NULL CHECK (saldo_esperado_centavos >= 0),
+            saldo_contado_centavos INTEGER NOT NULL CHECK (saldo_contado_centavos >= 0),
+            confirmado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
     # Catálogo configurable de unidades; conserva los textos ya utilizados.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS unidades (
