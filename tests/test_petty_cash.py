@@ -237,6 +237,10 @@ class PettyCashTest(unittest.TestCase):
                (folio, fecha, hora, total, metodo_pago, total_neto)
                VALUES ('EARLY', '2026-10-01', '10:00:00', 50, 'Efectivo', 50)"""
         )
+        cursor.execute(
+            """INSERT INTO pagos_venta (venta_id, metodo_pago, monto)
+               VALUES (?, 'Efectivo', 50)""", (cursor.lastrowid,)
+        )
         self.db.commit()
         self.service.confirm_closing(
             "2026-10-01", {("Billete", 50.0): 1}, 0
