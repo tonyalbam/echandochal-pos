@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFrame,
+    QGridLayout,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -57,7 +58,27 @@ class PaymentAmountInput(QLineEdit):
         )
         self.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.setMinimumHeight(38)
+        self.setMinimumWidth(175)
+        # Prefijo puramente visual: nunca se almacena en el texto ni altera
+        # la validación, los centavos, el cambio o el cálculo de comisión.
+        self.currency_prefix = QLabel("$", self)
+        self.currency_prefix.setObjectName("currencyPrefix")
+        self.currency_prefix.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
+        self.currency_prefix.setStyleSheet(
+            "background: transparent; border: none; padding: 0;"
+        )
+        self.setTextMargins(28, 0, 8, 0)
         self.setToolTip("Escribe el monto en pesos, con hasta dos decimales.")
+        self._position_currency_prefix()
+
+    def _position_currency_prefix(self) -> None:
+        self.currency_prefix.setGeometry(10, 0, 18, self.height())
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._position_currency_prefix()
 
     def focusInEvent(self, event) -> None:
         super().focusInEvent(event)
@@ -92,26 +113,29 @@ class SalePaymentDialog(QDialog):
         help_text.setWordWrap(True)
         layout.addWidget(help_text)
         self.amounts = {}
-        for name in SaleService.PAYMENT_METHODS:
-            row = QHBoxLayout()
-            row.addWidget(QLabel(
-                "Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name
-            ))
-            field = PaymentAmountInput(self)
-            field.setAccessibleName(
+        # Una sola cuadrícula para mantener idéntico ancho y alineación
+        # de todas las entradas, incluso con etiquetas de distinta longitud.
+        amounts_grid = QGridLayout()
+        amounts_grid.setHorizontalSpacing(14)
+        amounts_grid.setVerticalSpacing(10)
+        amounts_grid.setColumnStretch(1, 1)
+        for row_index, name in enumerate(SaleService.PAYMENT_METHODS):
+            display_name = (
                 "Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name
             )
+            amounts_grid.addWidget(QLabel(display_name), row_index, 0)
+            field = PaymentAmountInput(self)
+            field.setAccessibleName(display_name)
             field.textChanged.connect(self._update)
-            row.addWidget(field)
+            amounts_grid.addWidget(field, row_index, 1)
             self.amounts[name] = field
-            layout.addLayout(row)
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Efectivo recibido"))
         self.cash_received = PaymentAmountInput(self)
         self.cash_received.setAccessibleName("Efectivo recibido")
         self.cash_received.textChanged.connect(self._update)
-        row.addWidget(self.cash_received)
-        layout.addLayout(row)
+        received_row = len(SaleService.PAYMENT_METHODS)
+        amounts_grid.addWidget(QLabel("Efectivo recibido"), received_row, 0)
+        amounts_grid.addWidget(self.cash_received, received_row, 1)
+        layout.addLayout(amounts_grid)
         self.remaining_label = QLabel()
         self.change_label = QLabel()
         self.change_label.setStyleSheet("font-size: 18px; font-weight: bold;")
