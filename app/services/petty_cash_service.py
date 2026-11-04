@@ -4,6 +4,7 @@ Los cobros en efectivo son los montos aplicados a ventas, NO el efectivo
 recibido: el cambio al cliente ya está descontado del importe de venta.
 """
 from datetime import date
+import json
 from decimal import Decimal
 from app.services.payment_allocation import cents
 
@@ -187,15 +188,20 @@ class PettyCashService:
                 "Corrige la captura antes de confirmar el corte."
             )
         cursor = self.database.cursor()
+        denominations = {
+            str(int(denom)): counts.get((kind, denom), 0)
+            for kind, denom in service.BILL_DENOMINATIONS
+        }
         try:
             cursor.execute(
                 """INSERT INTO cierres_caja
                    (fecha, saldo_inicial_centavos, ventas_efectivo_centavos,
-                    gastos_centavos, saldo_esperado_centavos, saldo_contado_centavos)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                    gastos_centavos, saldo_esperado_centavos, saldo_contado_centavos,
+                    conteos_json, morralla_centavos)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (day, summary["saldo_inicial_centavos"],
                  summary["ventas_efectivo_centavos"], summary["gastos_centavos"],
-                 expected, counted),
+                 expected, counted, json.dumps(denominations), cents(loose_change)),
             )
             self.database.commit()
         except Exception:
