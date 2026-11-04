@@ -236,9 +236,18 @@ class CashClosingWindow(QWidget):
         )):
             carryover_layout.addWidget(QLabel(label), index, 0)
             carryover_layout.addWidget(widget, index, 1)
+        fund_row = QHBoxLayout()
+        self.initial_fund_amount = ClearOnFocusAmount(decimals=2)
+        self.initial_fund_amount.setPlaceholderText("Fondo inicial en efectivo")
+        self.initial_fund_button = QPushButton("Registrar fondo inicial (una vez)")
+        self.initial_fund_button.clicked.connect(self._register_initial_fund)
+        fund_row.addWidget(self.initial_fund_amount)
+        fund_row.addWidget(self.initial_fund_button)
+        carryover_layout.addWidget(QLabel("Fondo previo a primer corte"), 4, 0)
+        carryover_layout.addLayout(fund_row, 4, 1)
         self.confirm_closing_button = QPushButton("Confirmar el corte diario")
         self.confirm_closing_button.clicked.connect(self._confirm_closing)
-        carryover_layout.addWidget(self.confirm_closing_button, 4, 0, 1, 2)
+        carryover_layout.addWidget(self.confirm_closing_button, 5, 0, 1, 2)
         layout.addWidget(carryover_group)
         layout.addStretch()
 
@@ -308,6 +317,9 @@ class CashClosingWindow(QWidget):
             if closed else "Pendiente de confirmación"
         )
         self.confirm_closing_button.setEnabled(not closed)
+        can_fund = not closed and summary["fondo_inicial"] is None
+        self.initial_fund_amount.setEnabled(can_fund)
+        self.initial_fund_button.setEnabled(can_fund)
         self.add_expense_button.setEnabled(not closed)
         self.remove_expense_button.setEnabled(not closed)
         self.expense_type.setEnabled(not closed)
@@ -316,6 +328,32 @@ class CashClosingWindow(QWidget):
         for field in self.cash_inputs.values():
             field.setReadOnly(closed)
         self.loose_change.setReadOnly(closed)
+
+    def _register_initial_fund(self) -> None:
+        amount = self.initial_fund_amount.amount()
+        if amount <= 0:
+            QMessageBox.warning(
+                self, "Fondo inicial", "Ingresa el monto inicial en efectivo."
+            )
+            return
+        confirm = QMessageBox.question(
+            self, "Registrar fondo inicial",
+            f"¿Registrar un fondo inicial de $ {amount:,.2f}?\n\n"
+            "Solo se puede registrar una vez, antes del primer corte confirmado. "
+            "Este importe se sumará al efectivo disponible de caja chica.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.petty_cash.register_initial_fund(self._selected_date(), amount)
+        except ValueError as error:
+            QMessageBox.warning(self, "Fondo no registrado", str(error))
+            return
+        self.initial_fund_amount.clear()
+        self._refresh_petty_cash()
+        self._update_cash_reconciliation()
 
     def _register_expense(self) -> None:
         try:
