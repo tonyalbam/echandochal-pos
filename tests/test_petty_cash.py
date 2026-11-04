@@ -98,6 +98,32 @@ class PettyCashTest(unittest.TestCase):
             24500
         )
 
+    def test_initial_fund_is_one_time_and_carries_forward(self):
+        self.assertEqual(
+            self.service.register_initial_fund("2026-10-01", "300.00"), 30000
+        )
+        self.assertEqual(
+            self.service.get_summary("2026-10-01")["saldo_inicial_centavos"],
+            30000,
+        )
+        with self.assertRaises(ValueError):
+            self.service.register_initial_fund("2026-10-01", 50)
+        self.service.add_expense(
+            "2026-10-01", "Gastos variables", "Papel", 25
+        )
+        self.service.confirm_closing(
+            "2026-10-01", {("Billete", 200.0): 1,
+                           ("Billete", 50.0): 1,
+                           ("Billete", 20.0): 1}, 5
+        )
+        next_day = self.service.get_summary("2026-10-02")
+        self.assertEqual(next_day["saldo_inicial_centavos"], 27500)
+
+    def test_initial_fund_cannot_be_added_after_first_closing(self):
+        self.service.confirm_closing("2026-10-01", {}, 0)
+        with self.assertRaises(ValueError):
+            self.service.register_initial_fund("2026-10-02", 100)
+
     def test_unbalanced_closing_cannot_be_confirmed(self):
         self.add_sale("2026-10-01", 100, 100)
         with self.assertRaisesRegex(ValueError, "no cuadra"):
