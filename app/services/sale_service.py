@@ -225,6 +225,17 @@ class SaleService:
         try:
             cursor.execute("BEGIN")
 
+            # Un cierre confirmado congela el efectivo de ese día.
+            # Impide ventas posteriores que dejarían el saldo de caja incorrecto.
+            cursor.execute(
+                "SELECT 1 FROM cierres_caja WHERE fecha = ?", (fecha,)
+            )
+            if cursor.fetchone():
+                raise ValueError(
+                    "El corte de hoy ya está confirmado. "
+                    "No es posible registrar nuevas ventas para esa fecha."
+                )
+
             # Validamos existencia antes de modificar cualquier dato.
             for item in items:
                 product_id = int(item["producto_id"])
