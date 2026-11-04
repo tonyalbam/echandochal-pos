@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QFileDialog,
     QGridLayout,
+    QHeaderView,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QSizePolicy,
+    QAbstractItemView,
     QVBoxLayout,
     QWidget,
 )
@@ -104,12 +107,33 @@ class CashClosingWindow(QWidget):
         controls.addWidget(pdf_button)
         layout.addLayout(controls)
 
-        self.table = QTableWidget(3, 5)
+        # Tres formas de pago, siempre visibles. Una tabla flexible en ancho
+        # y de altura fija evita que QScrollArea comprima las filas a cero.
+        self.table = QTableWidget(len(self.service.PAYMENT_METHODS), 5)
         self.table.setHorizontalHeaderLabels([
             "Forma de pago", "Tickets", "Ventas", "Comisiones", "Dinero neto"
         ])
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(34)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(95)
+        header.setFixedHeight(34)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.table.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        table_height = (
+            header.height()
+            + self.table.verticalHeader().defaultSectionSize()
+            * len(self.service.PAYMENT_METHODS)
+            + 2 * self.table.frameWidth()
+            + 4
+        )
+        self.table.setFixedHeight(table_height)
         layout.addWidget(self.table)
 
         summary_grid = QGridLayout()
