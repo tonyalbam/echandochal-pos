@@ -196,6 +196,13 @@ def create_database(db: Database) -> None:
     # Caja chica: efectivo arrastrado y retiros diarios auditables.
     # Las tablas nuevas no alteran ni migran registros históricos de ventas.
     cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS fondo_inicial_caja (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            fecha TEXT NOT NULL,
+            monto_centavos INTEGER NOT NULL CHECK(monto_centavos > 0),
+            descripcion TEXT NOT NULL DEFAULT 'Fondo inicial de caja chica',
+            creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS gastos_caja (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fecha TEXT NOT NULL,
