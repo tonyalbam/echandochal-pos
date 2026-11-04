@@ -40,7 +40,7 @@ class PettyCashService:
         cursor.execute(
             """SELECT id, fecha, tipo, descripcion, monto_centavos,
                       creado_en FROM gastos_caja
-               WHERE fecha = ? ORDER BY id""", (day,)
+               WHERE fecha = ? AND anulado = 0 ORDER BY id""", (day,)
         )
         return [dict(row) for row in cursor.fetchall()]
 
@@ -152,7 +152,9 @@ class PettyCashService:
         self._assert_day_editable(day)
         cursor = self.database.cursor()
         cursor.execute(
-            "DELETE FROM gastos_caja WHERE fecha = ? AND id = ?",
+            """UPDATE gastos_caja SET anulado = 1,
+                      anulado_en = CURRENT_TIMESTAMP
+                 WHERE fecha = ? AND id = ? AND anulado = 0""",
             (day, int(expense_id)),
         )
         if cursor.rowcount != 1:
