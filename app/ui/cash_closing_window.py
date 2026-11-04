@@ -1,8 +1,9 @@
 from app.ui.theme import theme_colors
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDateEdit,
-    QDoubleSpinBox,
+    QLineEdit,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -10,7 +11,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -21,12 +21,37 @@ from app.database.connection import Database
 from app.services.cash_closing_service import CashClosingService
 
 
-class ClearOnFocusDoubleSpinBox(QDoubleSpinBox):
-    """Reinicia el importe al volver a entrar al campo."""
+class ClearOnFocusAmount(QLineEdit):
+    """Cantidad editable sin flechas, que se limpia al recibir el foco.
+
+    El campo vacío representa cero solo para el cálculo y los exportables.
+    """
+
+    def __init__(self, *, decimals: int = 0, parent=None) -> None:
+        super().__init__(parent)
+        if decimals not in (0, 2):
+            raise ValueError("Solo se permiten cantidades enteras o monetarias.")
+        self.decimals = decimals
+        pattern = (
+            r"\d{0,6}(?:\.\d{0,2})?" if decimals else r"\d{0,4}"
+        )
+        self.setValidator(
+            QRegularExpressionValidator(QRegularExpression(pattern), self)
+        )
+        self.setPlaceholderText("Escribe el monto" if decimals else "Cantidad")
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setMinimumHeight(35)
+        self.setMinimumWidth(110)
 
     def focusInEvent(self, event) -> None:
-        self.setValue(0)
         super().focusInEvent(event)
+        self.clear()
+
+    def amount(self):
+        value = self.text().strip()
+        if not value:
+            return 0.0 if self.decimals else 0
+        return float(value) if self.decimals else int(value)
 
 
 class CashClosingWindow(QWidget):
@@ -112,9 +137,8 @@ class CashClosingWindow(QWidget):
         ):
             cash_layout.addWidget(QLabel(kind), row, 0)
             cash_layout.addWidget(QLabel(f"$ {denomination:,.2f}"), row, 1)
-            quantity = QSpinBox()
-            quantity.setRange(0, 9999)
-            quantity.valueChanged.connect(self._update_cash_reconciliation)
+            quantity = ClearOnFocusAmount()
+            quantity.textChanged.connect(self._update_cash_reconciliation)
             cash_layout.addWidget(quantity, row, 2)
             amount = QLabel("$ 0.00")
             amount.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -124,11 +148,8 @@ class CashClosingWindow(QWidget):
             self.cash_amounts[key] = amount
 
         cash_layout.addWidget(QLabel("Morralla"), 1, 5)
-        self.loose_change = ClearOnFocusDoubleSpinBox()
-        self.loose_change.setRange(0, 999999.99)
-        self.loose_change.setDecimals(2)
-        self.loose_change.setPrefix("$ ")
-        self.loose_change.valueChanged.connect(self._update_cash_reconciliation)
+        self.loose_change = ClearOnFocusAmount(decimals=2)
+        self.loose_change.textChanged.connect(self._update_cash_reconciliation)
         cash_layout.addWidget(self.loose_change, 1, 6, 1, 2)
 
         self.cash_expected = QLabel("$ 0.00")
@@ -154,10 +175,10 @@ class CashClosingWindow(QWidget):
     def _date_changed(self) -> None:
         for widget in self.cash_inputs.values():
             widget.blockSignals(True)
-            widget.setValue(0)
+            widget.clear()
             widget.blockSignals(False)
         self.loose_change.blockSignals(True)
-        self.loose_change.setValue(0)
+        self.loose_change.clear()
         self.loose_change.blockSignals(False)
         self.refresh()
 
@@ -189,13 +210,13 @@ class CashClosingWindow(QWidget):
 
     def _cash_counts(self) -> dict[tuple[str, float], int]:
         return {
-            key: widget.value()
+            key: widget.amount()
             for key, widget in self.cash_inputs.items()
         }
 
     def _update_cash_reconciliation(self) -> None:
         cash = self.service.calculate_cash_reconciliation(
-            self._selected_date(), self._cash_counts(), self.loose_change.value()
+            self._selected_date(), self._cash_counts(), self.loose_change.amount()
         )
         for row in cash["denominaciones"]:
             key = (row["tipo"], row["denominacion"])
