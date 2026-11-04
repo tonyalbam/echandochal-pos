@@ -421,6 +421,7 @@ class SaleHistoryService:
                 SELECT
                     id,
                     folio,
+                    fecha,
                     cancelada
                 FROM ventas
                 WHERE id = ?
@@ -438,6 +439,16 @@ class SaleHistoryService:
             if venta["cancelada"]:
                 raise ValueError(
                     "La venta ya está cancelada."
+                )
+
+            cursor.execute(
+                "SELECT 1 FROM cierres_caja WHERE fecha >= ? LIMIT 1",
+                (venta["fecha"],),
+            )
+            if cursor.fetchone():
+                raise ValueError(
+                    "La venta pertenece a un período con corte de caja confirmado. "
+                    "No es posible cancelarla sin un ajuste de caja auditado."
                 )
 
             folio = venta["folio"]
