@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -132,7 +133,19 @@ class CashClosingService:
     ) -> dict:
         """Compara el efectivo contado contra las ventas en efectivo."""
 
-        counts = counts or {}
+        summary = PettyCashService(self.database).get_summary(closing_date)
+        saved = summary["cierre"]
+        if saved is not None:
+            stored_counts = json.loads(saved["conteos_json"] or "{}")
+            counts = {
+                (kind, denomination): int(
+                    stored_counts.get(str(int(denomination)), 0)
+                )
+                for kind, denomination in self.BILL_DENOMINATIONS
+            }
+            loose_change = saved["morralla_centavos"] / 100
+        else:
+            counts = counts or {}
         rows = []
         total_counted = 0.0
         for kind, denomination in self.BILL_DENOMINATIONS:
@@ -148,9 +161,13 @@ class CashClosingService:
         loose_change = round(max(0.0, float(loose_change)), 2)
         total_counted += loose_change
 
-        summary = PettyCashService(self.database).get_summary(closing_date)
-        expected_cents = summary["saldo_esperado_centavos"]
+        expected_cents = (
+            saved["saldo_esperado_centavos"] if saved is not None
+            else summary["saldo_esperado_centavos"]
+        )
         expected = expected_cents / 100
+        if saved is not None:
+            total_counted = saved["saldo_contado_centavos"] / 100
         difference = round(total_counted - expected, 2)
         return {
             "fecha": closing_date,
