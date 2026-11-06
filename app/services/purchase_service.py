@@ -8,10 +8,29 @@ from openpyxl.utils import get_column_letter
 
 from app.database.connection import Database
 from app.services.configuration_service import ConfigurationService
+from app.services.payment_allocation import cents
+from app.services.petty_cash_service import PettyCashService
 
 
 class PurchaseService:
     """Operaciones de negocio relacionadas con compras."""
+
+    PAYMENT_METHODS = ("Efectivo", "Tarjeta", "Transferencia")
+
+    @classmethod
+    def validate_payment(cls, total, payments):
+        if not isinstance(payments, dict):
+            raise ValueError("Especifica los montos por forma de pago.")
+        if set(payments) - set(cls.PAYMENT_METHODS):
+            raise ValueError("La compra contiene una forma de pago desconocida.")
+        amounts = {
+            method: cents(payments.get(method, 0))
+            for method in cls.PAYMENT_METHODS
+        }
+        if sum(amounts.values()) != cents(total):
+            raise ValueError("La suma de efectivo, tarjeta y transferencia debe igualar el total de la compra.")
+        return amounts
+
 
     def __init__(self, database: Database) -> None:
         self.database = database
@@ -87,6 +106,7 @@ class PurchaseService:
         supplier_id: Optional[int] = None,
         notes: str = "",
         user_id: Optional[int] = None,
+        payments: dict[str, float] | None = None,
     ) -> dict:
         """
         Registra una compra completa.
@@ -142,6 +162,12 @@ class PurchaseService:
 
         subtotal = round(subtotal, 2)
         total = subtotal
+        # None se mantiene para compras históricas registradas sin forma
+        # de pago. Las compras nuevas de la UI siempre incluyen desglose.
+        allocations = (
+            self.validate_payment(total, payments)
+            if payments is not None else None
+        )
 
         now = datetime.now()
 
@@ -150,6 +176,26 @@ class PurchaseService:
 
         try:
             cursor.execute("BEGIN")
+
+            if allocations is not None:
+                cursor.execute(
+                    "SELECT 1 FROM cierres_caja WHERE fecha = ?", (fecha,)
+                )
+                if cursor.fetchone():
+                    raise ValueError(
+                        "Ya se confirmó el corte diario de hoy. "
+                        "No se pueden registrar nuevas compras con desembolsos."
+                    )
+                if allocations["Efectivo"]:
+                    available = PettyCashService(self.database).get_summary(
+                        fecha
+                    )["saldo_esperado_centavos"]
+                    if allocations["Efectivo"] > available:
+                        raise ValueError(
+                            f"No hay suficiente efectivo en caja chica. "
+                            f"Disponible: $ {max(available, 0) / 100:,.2f}. "
+                            "Revisa el fondo inicial o utiliza otro medio de pago."
+                        )
 
             # Validamos todos los productos antes de modificar datos.
             for item in items:
@@ -202,6 +248,16 @@ class PurchaseService:
             )
 
             purchase_id = int(cursor.lastrowid)
+
+            if allocations is not None:
+                for method, amount in allocations.items():
+                    if amount:
+                        cursor.execute(
+                            """INSERT INTO pagos_compra
+                               (compra_id, metodo_pago, monto_centavos)
+                               VALUES (?, ?, ?)""",
+                            (purchase_id, method, amount),
+                        )
 
             # Detalle + actualización del inventario.
             for item in items:
@@ -303,6 +359,10 @@ class PurchaseService:
             "total": total,
             "proveedor_id": supplier_id,
             "notas": notes,
+            "pagos": (
+                {method: value / 100 for method, value in allocations.items()}
+                if allocations is not None else None
+            ),
         }
 
     def get_purchase(
@@ -324,7 +384,11 @@ class PurchaseService:
                 c.total,
                 c.notas,
                 c.usuario_id,
-                COALESCE(pr.nombre, 'Sin proveedor') AS proveedor
+                COALESCE(pr.nombre, 'Sin proveedor') AS proveedor,
+                COALESCE((
+                    SELECT GROUP_CONCAT(pc.metodo_pago, ' + ')
+                    FROM pagos_compra pc WHERE pc.compra_id = c.id
+                ), 'Sin desglose') AS formas_pago
             FROM compras c
             LEFT JOIN proveedores pr
                 ON pr.id = c.proveedor_id
@@ -364,6 +428,19 @@ class PurchaseService:
             for item in cursor.fetchall()
         ]
 
+        cursor.execute(
+            """SELECT metodo_pago, monto_centavos
+               FROM pagos_compra WHERE compra_id = ?
+               ORDER BY CASE metodo_pago
+                   WHEN 'Efectivo' THEN 1
+                   WHEN 'Tarjeta' THEN 2 ELSE 3 END""",
+            (purchase_id,),
+        )
+        purchase["pagos"] = [
+            {"metodo_pago": row["metodo_pago"],
+             "monto": row["monto_centavos"] / 100}
+            for row in cursor.fetchall()
+        ]
         return purchase
 
     def list_purchases(
@@ -387,7 +464,11 @@ class PurchaseService:
                 c.total,
                 c.notas,
                 c.usuario_id,
-                COALESCE(pr.nombre, 'Sin proveedor') AS proveedor
+                COALESCE(pr.nombre, 'Sin proveedor') AS proveedor,
+                COALESCE((
+                    SELECT GROUP_CONCAT(pc.metodo_pago, ' + ')
+                    FROM pagos_compra pc WHERE pc.compra_id = c.id
+                ), 'Sin desglose') AS formas_pago
             FROM compras c
             LEFT JOIN proveedores pr
                 ON pr.id = c.proveedor_id
