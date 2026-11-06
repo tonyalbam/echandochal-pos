@@ -728,7 +728,7 @@ class PurchaseWindow(QWidget):
         if payment_dialog.exec() != QDialog.DialogCode.Accepted:
             return
         payments = payment_dialog.result
-        breakdown = "\\n".join(
+        breakdown = "\n".join(
             f"{method}: $ {amount:,.2f}"
             for method, amount in payments.items() if amount > 0
         )
@@ -736,8 +736,8 @@ class PurchaseWindow(QWidget):
             self,
             "Registrar compra",
             (
-                "¿Deseas registrar esta compra?\\n\\n"
-                f"Total: $ {total:,.2f}\\n{breakdown}"
+                "¿Deseas registrar esta compra?\n\n"
+                f"Total: $ {total:,.2f}\n{breakdown}"
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
