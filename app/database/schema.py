@@ -206,7 +206,7 @@ def create_database(db: Database) -> None:
         CREATE TABLE IF NOT EXISTS gastos_caja (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fecha TEXT NOT NULL,
-            tipo TEXT NOT NULL CHECK (tipo IN ('Gastos Fijos', 'Gastos variables')),
+            tipo TEXT NOT NULL CHECK (tipo IN ('Gastos Fijos', 'Gastos variables', 'Sobre/Valores')),
             descripcion TEXT NOT NULL CHECK (LENGTH(TRIM(descripcion)) > 0),
             monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
             creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -251,6 +251,43 @@ def create_database(db: Database) -> None:
         )
     if "anulado_en" not in columns:
         cursor.execute("ALTER TABLE gastos_caja ADD COLUMN anulado_en TEXT")
+
+    # SQLite no permite editar un CHECK existente con ALTER COLUMN.
+    # Recrear únicamente la tabla de gastos, conservando todas las filas,
+    # sus IDs, anulaciones y el consecutivo AUTOINCREMENT.
+    expense_schema = cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='gastos_caja'"
+    ).fetchone()[0]
+    if "Sobre/Valores" not in expense_schema:
+        cursor.execute("""
+            CREATE TABLE gastos_caja_actualizada (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT NOT NULL,
+                tipo TEXT NOT NULL CHECK (
+                    tipo IN ('Gastos Fijos', 'Gastos variables', 'Sobre/Valores')
+                ),
+                descripcion TEXT NOT NULL CHECK (LENGTH(TRIM(descripcion)) > 0),
+                monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
+                creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                anulado INTEGER NOT NULL DEFAULT 0 CHECK (anulado IN (0, 1)),
+                anulado_en TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO gastos_caja_actualizada
+                (id, fecha, tipo, descripcion, monto_centavos,
+                 creado_en, anulado, anulado_en)
+            SELECT id, fecha, tipo, descripcion, monto_centavos,
+                   creado_en, anulado, anulado_en
+            FROM gastos_caja
+        """)
+        cursor.execute("DROP TABLE gastos_caja")
+        cursor.execute(
+            "ALTER TABLE gastos_caja_actualizada RENAME TO gastos_caja"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_gastos_caja_fecha ON gastos_caja(fecha)"
+        )
 
     # Catálogo configurable de unidades; conserva los textos ya utilizados.
     cursor.execute("""
