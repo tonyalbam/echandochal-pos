@@ -147,7 +147,7 @@ class ProfitBreakdownTest(unittest.TestCase):
                 "Ventas netas en efectivo",
             )
             self.assertEqual(
-                book["Corte general"]["B2"].value,
+                book["Corte general"]["B3"].value,
                 "Por conciliar",
             )
             sheet = book["Desglose utilidad"]
