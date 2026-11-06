@@ -20,6 +20,7 @@ from reportlab.platypus import (
 from app.database.connection import Database
 from app.services.configuration_service import ConfigurationService
 from app.services.petty_cash_service import PettyCashService
+from app.services.general_closing_service import GeneralClosingService
 
 
 class CashClosingService:
@@ -408,6 +409,63 @@ class CashClosingService:
             profit_sheet.column_dimensions[get_column_letter(col)].width = width
         profit_sheet.freeze_panes = "A12"
 
+        general_service = GeneralClosingService(self.database)
+        concept_sheet = workbook.create_sheet("Entradas salidas acumuladas")
+        concept_sheet.append([
+            "Concepto", "Tipo", "Movimiento del día",
+            "Acumulado hasta la fecha"
+        ])
+        for item in general_service.get_concept_movements(closing_date):
+            concept_sheet.append([
+                item["concepto"], item["tipo"],
+                item["dia_centavos"] / 100,
+                item["acumulado_centavos"] / 100,
+            ])
+            for column in (3, 4):
+                concept_sheet.cell(
+                    concept_sheet.max_row, column
+                ).number_format = money
+        for column, width in enumerate((55, 14, 24, 29), start=1):
+            concept_sheet.column_dimensions[
+                get_column_letter(column)
+            ].width = width
+        concept_sheet.freeze_panes = "A2"
+
+        general_sheet = workbook.create_sheet("Corte general")
+        general_sheet.append([
+            "Medio de pago", "Saldo inicial", "Ventas netas",
+            "Compras", "Otras salidas", "Saldo esperado",
+            "Saldo real", "Diferencia",
+        ])
+        general_snapshot = general_service.get_summary(closing_date)
+        for item in general_snapshot["medios"]:
+            general_sheet.append([
+                item["metodo_pago"],
+                item["saldo_inicial_centavos"] / 100
+                if item["saldo_inicial_centavos"] is not None else "Por conciliar",
+                item["entradas_centavos"] / 100,
+                item["compras_centavos"] / 100,
+                item["otras_salidas_centavos"] / 100,
+                item["saldo_esperado_centavos"] / 100
+                if item["saldo_esperado_centavos"] is not None else "Por conciliar",
+                item["saldo_real_centavos"] / 100
+                if item["saldo_real_centavos"] is not None else "Pendiente",
+                item["diferencia_centavos"] / 100
+                if item["diferencia_centavos"] is not None else "Pendiente",
+            ])
+            for column in range(2, 9):
+                general_sheet.cell(general_sheet.max_row, column).number_format = money
+        general_sheet.append([
+            "Estado", "CONFIRMADO" if general_snapshot["cierre"]
+            else "PENDIENTE"
+        ])
+        for column, width in enumerate(
+            (21, 20, 20, 19, 20, 20, 20, 20), start=1
+        ):
+            general_sheet.column_dimensions[
+                get_column_letter(column)
+            ].width = width
+
         flows_sheet = workbook.create_sheet("Flujos por medio")
         flows_sheet.append([
             "Medio de pago", "Entradas de ventas netas",
@@ -656,6 +714,71 @@ class CashClosingService:
         story.append(flow_table)
         story.append(Paragraph(
             "Los flujos son movimientos del día, no saldos bancarios.",
+            styles["Normal"],
+        ))
+        general_service = GeneralClosingService(self.database)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(
+            "<b>Corte general entradas/salidas acumuladas</b>",
+            styles["Heading2"],
+        ))
+        concepts_data = [["Concepto", "Tipo", "Hoy", "Acumulado"]]
+        for item in general_service.get_concept_movements(closing_date):
+            concepts_data.append([
+                Paragraph(item["concepto"], styles["Normal"]),
+                item["tipo"],
+                f"$ {item['dia_centavos'] / 100:,.2f}",
+                f"$ {item['acumulado_centavos'] / 100:,.2f}",
+            ])
+        concepts_table = Table(
+            concepts_data, colWidths=[68 * mm, 23 * mm, 32 * mm, 34 * mm],
+            repeatRows=1,
+        )
+        concepts_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(concepts_table)
+
+        general_snapshot = general_service.get_summary(closing_date)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("<b>Corte general</b>", styles["Heading2"]))
+        general_data = [[
+            "Medio", "Saldo inicial", "Esperado", "Saldo real", "Diferencia"
+        ]]
+        for item in general_snapshot["medios"]:
+            values = [
+                item["saldo_inicial_centavos"],
+                item["saldo_esperado_centavos"],
+                item["saldo_real_centavos"],
+                item["diferencia_centavos"],
+            ]
+            general_data.append([
+                item["metodo_pago"],
+                *[
+                    "Pendiente" if value is None
+                    else f"$ {value / 100:,.2f}" for value in values
+                ],
+            ])
+        general_table = Table(
+            general_data,
+            colWidths=[31 * mm, 33 * mm, 33 * mm, 33 * mm, 33 * mm],
+            repeatRows=1,
+        )
+        general_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(general_table)
+        story.append(Paragraph(
+            "Corte general CONFIRMADO" if general_snapshot["cierre"]
+            else "Corte general pendiente de confirmación",
             styles["Normal"],
         ))
 
