@@ -140,6 +140,16 @@ class ProfitBreakdownTest(unittest.TestCase):
             pdf = self.service.export_pdf("2026-11-05", base / "corte.pdf")
             book = load_workbook(excel, data_only=False)
             self.assertIn("Desglose utilidad", book.sheetnames)
+            self.assertIn("Entradas salidas acumuladas", book.sheetnames)
+            self.assertIn("Corte general", book.sheetnames)
+            self.assertEqual(
+                book["Entradas salidas acumuladas"]["A2"].value,
+                "Ventas netas en efectivo",
+            )
+            self.assertEqual(
+                book["Corte general"]["B2"].value,
+                "Por conciliar",
+            )
             sheet = book["Desglose utilidad"]
             self.assertEqual(sheet["B2"].value, 996)
             self.assertEqual(sheet["B3"].value, 500)
@@ -152,6 +162,8 @@ class ProfitBreakdownTest(unittest.TestCase):
                 p.extract_text() or "" for p in PdfReader(pdf).pages
             )
             self.assertIn("Desglose de utilidad", output)
+            self.assertIn("Corte general entradas/salidas acumuladas", output)
+            self.assertIn("Corte general", output)
             self.assertIn("Utilidad operativa", output)
             self.assertIn("500.00", output)
             self.assertIn("386.00", output)
