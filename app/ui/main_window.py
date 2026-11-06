@@ -19,6 +19,7 @@ from app.ui.purchase_history_window import PurchaseHistoryWindow
 from app.ui.dashboard_window import DashboardWindow
 from app.ui.configuration_window import ConfigurationWindow
 from app.ui.cash_closing_window import CashClosingWindow
+from app.ui.cash_closing_history_window import CashClosingHistoryWindow
 from app.ui.supplier_window import SupplierWindow
 
 class MainWindow(QMainWindow):
@@ -63,6 +64,10 @@ class MainWindow(QMainWindow):
             self,
         )
         self.cash_closing_window = CashClosingWindow(
+            self.database,
+            self,
+        )
+        self.cash_closing_history_window = CashClosingHistoryWindow(
             self.database,
             self,
         )
@@ -114,8 +119,9 @@ class MainWindow(QMainWindow):
             ("📜  Historial de ventas", 4),
             ("📋  Historial de compras", 5),
             ("💰  Corte diario", 6),
-            ("📈  Dashboard", 7),
-            ("⚙  Configuración", 8),
+            ("📚  Historial cortes diarios efectivo", 7),
+            ("📈  Dashboard", 8),
+            ("⚙  Configuración", 9),
         ]
 
         for texto, indice in botones:
@@ -153,6 +159,7 @@ class MainWindow(QMainWindow):
         pagina_historial = self.sale_history_window
         pagina_historial_compras = self.purchase_history_window
         pagina_corte = self.cash_closing_window
+        pagina_historial_cortes = self.cash_closing_history_window
         pagina_dashboard = self.dashboard_window
         pagina_configuracion = self.configuration_window
 
@@ -164,6 +171,7 @@ class MainWindow(QMainWindow):
         pagina_historial,
         pagina_historial_compras,
         pagina_corte,
+        pagina_historial_cortes,
         pagina_dashboard,
         pagina_configuracion,
         ]:
@@ -218,8 +226,10 @@ class MainWindow(QMainWindow):
         elif indice == 6:
             self.cash_closing_window.refresh()
         elif indice == 7:
-            self.dashboard_window.refresh()
+            self.cash_closing_history_window.refresh()
         elif indice == 8:
+            self.dashboard_window.refresh()
+        elif indice == 9:
             self.configuration_window.refresh()
 
     def apply_theme(self, dark: bool) -> None:
