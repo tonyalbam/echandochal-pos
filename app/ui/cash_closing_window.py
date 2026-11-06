@@ -3,12 +3,12 @@ from PySide6.QtCore import QDate, Qt, QRegularExpression
 from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDateEdit,
+    QDialog,
     QComboBox,
     QScrollArea,
     QLineEdit,
     QFileDialog,
     QGridLayout,
-    QHeaderView,
     QHeaderView,
     QGroupBox,
     QHBoxLayout,
@@ -145,7 +145,7 @@ class CashClosingWindow(QWidget):
             ("dinero_neto", "DINERO NETO"),
             ("numero_tickets", "Número de tickets"),
             ("productos_vendidos", "Productos vendidos"),
-            ("utilidad", "Utilidad del día"),
+            ("utilidad", "UTILIDAD OPERATIVA DEL DÍA"),
         )
         for index, (key, label) in enumerate(fields):
             title_label = QLabel(label)
@@ -159,6 +159,41 @@ class CashClosingWindow(QWidget):
             summary_grid.addLayout(container, row, column)
             self.values[key] = value_label
         layout.addLayout(summary_grid)
+
+        # Transparencia: utilidad NO es dinero disponible en caja.
+        # Inventario comprado y traspasos Sobre/Valores son movimientos
+        # de recursos, no gastos deducibles en este indicador.
+        profit_group = QGroupBox("Cómo se calcula la utilidad del día")
+        profit_layout = QGridLayout(profit_group)
+        self.profit_values = {}
+        profit_fields = (
+            ("dinero_neto", "Ingresos netos de ventas"),
+            ("costo", "(-) Costo de mercancía vendida"),
+            ("utilidad_bruta", "(=) Utilidad bruta después de comisiones"),
+            ("gastos_operativos", "(-) Gastos fijos y variables"),
+            ("utilidad_operativa", "(=) Utilidad operativa estimada"),
+            ("sobre_valores", "Sobre/Valores: traspaso de caja, no gasto"),
+        )
+        for index, (key, label) in enumerate(profit_fields):
+            row, column = divmod(index, 3)
+            heading = QLabel(label)
+            heading.setWordWrap(True)
+            amount = QLabel("$ 0.00")
+            amount.setStyleSheet("font-size: 16px; font-weight: bold;")
+            profit_layout.addWidget(heading, row * 2, column)
+            profit_layout.addWidget(amount, row * 2 + 1, column)
+            self.profit_values[key] = amount
+        explanation = QLabel(
+            "Las compras de mercancía son inventario y afectan la utilidad "
+            "al vender sus productos. Los retiros Sobre/Valores afectan "
+            "el efectivo de caja, no la utilidad."
+        )
+        explanation.setWordWrap(True)
+        profit_layout.addWidget(explanation, 4, 0, 1, 3)
+        self.cost_detail_button = QPushButton("Ver costo de productos vendidos")
+        self.cost_detail_button.clicked.connect(self._show_cost_breakdown)
+        profit_layout.addWidget(self.cost_detail_button, 5, 0, 1, 3)
+        layout.addWidget(profit_group)
 
         cash_group = QGroupBox("Arqueo manual de efectivo")
         cash_layout = QGridLayout(cash_group)
@@ -335,12 +370,68 @@ class CashClosingWindow(QWidget):
 
         for key in ("total_ventas", "comisiones", "dinero_neto", "utilidad"):
             self.values[key].setText(f"$ {data[key]:,.2f}")
+        for key, widget in self.profit_values.items():
+            widget.setText(f"$ {data[key]:,.2f}")
         self.values["numero_tickets"].setText(str(data["numero_tickets"]))
         self.values["productos_vendidos"].setText(
             f"{data['productos_vendidos']:g}"
         )
         self._refresh_petty_cash()
         self._update_cash_reconciliation()
+
+    def _build_cost_breakdown_dialog(self) -> QDialog:
+        """Desglose verificable del costo histórico de los productos vendidos."""
+        day = self._selected_date()
+        data = self.service.get_daily_closing(day)
+        items = self.service.get_sold_cost_breakdown(day)
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Costo de mercancía vendida - {day}")
+        dialog.resize(830, 510)
+        layout = QVBoxLayout(dialog)
+        title = QLabel(f"Desglose de utilidad y costos - {day}")
+        title.setStyleSheet("font-size: 19px; font-weight: bold;")
+        layout.addWidget(title)
+        layout.addWidget(QLabel(
+            "Los costos son los registrados al momento de cada venta, "
+            "no los importes desembolsados en compras del día."
+        ))
+        table = QTableWidget(len(items), 5)
+        table.setObjectName("cost_detail")
+        table.setHorizontalHeaderLabels((
+            "Código", "Producto", "Cantidad vendida",
+            "Costo unitario en venta", "Costo total",
+        ))
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(items):
+            values = (
+                item["codigo"], item["producto"],
+                f'{item["cantidad"]:g}',
+                f'$ {item["costo_unitario"]:,.2f}',
+                f'$ {item["costo_total"]:,.2f}',
+            )
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(str(value)))
+        layout.addWidget(table)
+        summary = QLabel(
+            f"Ingreso neto por ventas: $ {data['dinero_neto']:,.2f}\n"
+            f"(-) Costo vendido: $ {data['costo']:,.2f}\n"
+            f"(=) Utilidad bruta: $ {data['utilidad_bruta']:,.2f}\n"
+            f"(-) Gastos fijos: $ {data['gastos_fijos']:,.2f}\n"
+            f"(-) Gastos variables: $ {data['gastos_variables']:,.2f}\n"
+            f"(=) Utilidad operativa estimada: $ {data['utilidad']:,.2f}"
+        )
+        summary.setObjectName("cost_profit_summary")
+        layout.addWidget(summary)
+        close = QPushButton("Cerrar")
+        close.clicked.connect(dialog.accept)
+        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+        return dialog
+
+    def _show_cost_breakdown(self) -> None:
+        self._build_cost_breakdown_dialog().exec()
 
     def _refresh_petty_cash(self) -> None:
         summary = self.petty_cash.get_summary(self._selected_date())
