@@ -129,6 +129,7 @@ class CashClosingHistoryWindow(QWidget):
         field_names = (
             ("saldo_inicial_centavos", "Saldo inicial"),
             ("ventas_efectivo_centavos", "Ventas en efectivo (cambio descontado)"),
+            ("compras_efectivo_centavos", "Compras de mercancía en efectivo"),
             ("gastos_centavos", "Gastos operativos"),
             ("saldo_esperado_centavos", "Efectivo esperado"),
             ("saldo_contado_centavos", "Monto de efectivo que debe tener la caja chica"),
@@ -145,6 +146,23 @@ class CashClosingHistoryWindow(QWidget):
         self.confirmation = QLabel("Sin corte seleccionado")
         grid.addWidget(self.confirmation, 4, 0, 1, 3)
         detail_layout.addWidget(values_group)
+
+        flows_group = QGroupBox("Entradas y salidas por medio de pago")
+        flows_layout = QVBoxLayout(flows_group)
+        self.payment_flows = QTableWidget(3, 4)
+        self.payment_flows.setHorizontalHeaderLabels((
+            "Medio", "Ventas netas", "Compras pagadas", "Flujo neto",
+        ))
+        self.payment_flows.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.payment_flows.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.payment_flows.verticalHeader().hide()
+        self.payment_flows.setFixedHeight(136)
+        flows_layout.addWidget(self.payment_flows)
+        detail_layout.addWidget(flows_group)
 
         expenses_group = QGroupBox("Histórico de gastos operativos de caja chica")
         expenses_layout = QVBoxLayout(expenses_group)
@@ -235,7 +253,8 @@ class CashClosingHistoryWindow(QWidget):
             f"Días registrados: {stats['dias']}  |  "
             f"Cortes confirmados: {stats['confirmados']}  |  "
             f"Entradas en efectivo: {money(stats['ventas_efectivo_centavos'])}  |  "
-            f"Gastos de caja chica: {money(stats['gastos_centavos'])}"
+            f"Gastos de caja chica: {money(stats['gastos_centavos'])}  |  "
+            f"Compras en efectivo: {money(stats['compras_efectivo_centavos'])}"
         )
         grouping = self.grouping.currentText()
         by_year, by_month = {}, {}
@@ -281,6 +300,7 @@ class CashClosingHistoryWindow(QWidget):
             value.setText("$ 0.00")
         self.confirmation.setText("Sin corte seleccionado")
         self.expenses.setRowCount(0)
+        self.payment_flows.clearContents()
 
     def _show_selected_day(self):
         day = self._selected_date()
@@ -296,6 +316,16 @@ class CashClosingHistoryWindow(QWidget):
             f"CONFIRMADO el {local_timestamp(closing['confirmado_en'])}"
             if closing else "PENDIENTE de confirmar"
         )
+        for row, flow in enumerate(detail["flujos_medios"]):
+            for column, value in enumerate((
+                flow["metodo_pago"],
+                money(flow["entradas_centavos"]),
+                money(flow["compras_centavos"]),
+                money(flow["flujo_neto_centavos"]),
+            )):
+                self.payment_flows.setItem(
+                    row, column, QTableWidgetItem(str(value))
+                )
         self.expenses.setRowCount(len(detail["gastos"]))
         for row, expense in enumerate(detail["gastos"]):
             values = (
