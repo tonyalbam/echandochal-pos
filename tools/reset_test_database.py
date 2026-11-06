@@ -57,9 +57,14 @@ def verify_test_target():
             "El perfil no apunta a la base ficticia permitida. "
             f"Carpeta actual: {configured!r}. No se modificó nada."
         )
-    if same_path(TEST_FOLDER, PRODUCTION_FOLDER):
+    if (
+        same_path(TEST_FOLDER, PRODUCTION_FOLDER)
+        or same_path(TEST_FOLDER.resolve(), PRODUCTION_FOLDER.resolve())
+    ):
         raise RuntimeError("Destino de pruebas coincide con producción.")
     db = TEST_FOLDER / DATABASE_NAME
+    if same_path(db.resolve(), (PRODUCTION_FOLDER / DATABASE_NAME).resolve()):
+        raise RuntimeError("La base de pruebas apunta a la base de producción.")
     if not db.is_file():
         raise FileNotFoundError(f"No existe la base de pruebas: {db}")
     return db
