@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -50,7 +51,7 @@ def test_reset_is_rejected_if_config_points_to_production(tmp_path, monkeypatch)
 def test_reset_clears_only_sandbox_and_keeps_verified_backup(tmp_path, monkeypatch):
     db, config = setup_sandbox(tmp_path, monkeypatch)
     reset.create_blank_staging(db)
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         conn.execute(
             """INSERT INTO productos(codigo,nombre,precio,existencia)
                VALUES ('PRUEBA1','Ficticio',30,7)"""
@@ -64,6 +65,7 @@ def test_reset_clears_only_sandbox_and_keeps_verified_backup(tmp_path, monkeypat
                    gastos_centavos, saldo_esperado_centavos, saldo_contado_centavos)
                VALUES ('2026-11-05', 0, 0, 0, 0, 0)"""
         )
+        conn.commit()
     original_config = config.read_text(encoding="utf-8")
     backup, recreated = reset.reset_test_database()
     assert recreated == db
