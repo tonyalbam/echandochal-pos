@@ -649,6 +649,7 @@ class CashClosingWindow(QWidget):
             ("utilidad_bruta", "(=) Utilidad bruta después de comisiones"),
             ("gastos_fijos", "(-) Gastos Fijos"),
             ("gastos_variables", "(-) Gastos variables"),
+            ("gastos_operativos", "(-) Total gastos operativos"),
             ("utilidad_operativa", "(=) Utilidad operativa"),
             ("sobre_valores", "Sobre/Valores: salida de efectivo, no gasto"),
         )):
@@ -745,6 +746,8 @@ class CashClosingWindow(QWidget):
         self._profit_popup.hide()
 
     def eventFilter(self, watched, event):
+        if not hasattr(self, "_profit_hover_targets"):
+            return super().eventFilter(watched, event)
         if watched in self._profit_hover_targets:
             if event.type() == QEvent.Type.Enter:
                 self._show_profit_popup(watched)
