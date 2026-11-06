@@ -5,6 +5,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = [("app/assets", "app/assets")]
 datas += collect_data_files("matplotlib")
+# La hora local del historial usa la base IANA, requerida en Windows.
+datas += collect_data_files("tzdata")
 hiddenimports = collect_submodules("reportlab.graphics.barcode")
 
 a = Analysis(
