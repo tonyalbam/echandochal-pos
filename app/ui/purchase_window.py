@@ -3,6 +3,8 @@ from PySide6.QtWidgets import (
     QCompleter,
     QComboBox,
     QDoubleSpinBox,
+    QDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -17,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.purchase_service import PurchaseService
+from app.ui.sale_window import PaymentAmountInput
 from app.ui.widgets.column_sort import next_sort, sort_records, SortableItem
 
 
@@ -38,6 +41,72 @@ class PurchaseItemsTable(QTableWidget):
             self.delete_requested.emit()
             return
         super().keyPressEvent(event)
+
+
+class PurchasePaymentDialog(QDialog):
+    """Desglose exacto de pagos de compra, sin importes precargados."""
+
+    def __init__(self, total: float, parent=None) -> None:
+        super().__init__(parent)
+        self.total = total
+        self.result = None
+        self.setWindowTitle("Pagar compra")
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        heading = QLabel(f"Total de la compra: $ {total:,.2f}")
+        heading.setStyleSheet("font-size: 20px; font-weight: bold;")
+        layout.addWidget(heading)
+        layout.addWidget(QLabel(
+            "Indica cuánto se desembolsó por cada medio de pago."
+        ))
+        grid = QGridLayout()
+        grid.setColumnStretch(1, 1)
+        self.amounts = {}
+        for row, method in enumerate(PurchaseService.PAYMENT_METHODS):
+            grid.addWidget(QLabel(method), row, 0)
+            field = PaymentAmountInput(self)
+            field.setAccessibleName(method)
+            field.textChanged.connect(self._update)
+            grid.addWidget(field, row, 1)
+            self.amounts[method] = field
+        layout.addLayout(grid)
+        self.remaining = QLabel()
+        layout.addWidget(self.remaining)
+        actions = QHBoxLayout()
+        cancel = QPushButton("Cancelar")
+        cancel.clicked.connect(self.reject)
+        actions.addWidget(cancel)
+        self.confirm = QPushButton("Confirmar pago de compra")
+        self.confirm.clicked.connect(self._accept)
+        actions.addWidget(self.confirm)
+        layout.addLayout(actions)
+        self._update()
+
+    def payments(self):
+        return {name: field.amount() for name, field in self.amounts.items()}
+
+    def _update(self, *_):
+        from app.services.payment_allocation import cents
+        difference = cents(self.total) - sum(
+            cents(field.amount()) for field in self.amounts.values()
+        )
+        self.remaining.setText(
+            f"{'Falta pagar' if difference >= 0 else 'Importe excedente'}: "
+            f"$ {abs(difference) / 100:,.2f}"
+        )
+        self.confirm.setEnabled(
+            difference == 0
+            and (self.total == 0 or any(field.amount() > 0 for field in self.amounts.values()))
+        )
+
+    def _accept(self):
+        try:
+            PurchaseService.validate_payment(self.total, self.payments())
+        except ValueError as error:
+            QMessageBox.warning(self, "Pago inválido", str(error))
+            return
+        self.result = self.payments()
+        self.accept()
 
 
 class PurchaseWindow(QWidget):
@@ -655,13 +724,23 @@ class PurchaseWindow(QWidget):
             for item in items
         )
 
+        payment_dialog = PurchasePaymentDialog(total, self)
+        if payment_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        payments = payment_dialog.result
+        breakdown = "\\n".join(
+            f"{method}: $ {amount:,.2f}"
+            for method, amount in payments.items() if amount > 0
+        )
         answer = QMessageBox.question(
             self,
             "Registrar compra",
             (
-                "¿Deseas registrar esta compra?\n\n"
-                f"Total: $ {total:,.2f}"
+                "¿Deseas registrar esta compra?\\n\\n"
+                f"Total: $ {total:,.2f}\\n{breakdown}"
             ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
         if answer != QMessageBox.StandardButton.Yes:
@@ -673,6 +752,7 @@ class PurchaseWindow(QWidget):
                 supplier_id=supplier_id,
                 notes=self.notes.text().strip(),
                 user_id=None,
+                payments=payments,
             )
 
         except Exception as error:
