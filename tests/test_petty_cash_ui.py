@@ -78,6 +78,22 @@ class PettyCashUiTest(unittest.TestCase):
         self.assertEqual(self.window.cash_expected.text(), "$ 70.00")
         self.assertTrue(self.window.confirm_closing_button.isEnabled())
 
+    def test_sobre_valores_is_available_in_expense_dropdown(self):
+        choices = [
+            self.window.expense_type.itemText(index)
+            for index in range(self.window.expense_type.count())
+        ]
+        self.assertEqual(
+            choices, ["Gastos Fijos", "Gastos variables", "Sobre/Valores"]
+        )
+        self.window.expense_type.setCurrentText("Sobre/Valores")
+        self.window.expense_description.setText("Resguardo en sobre")
+        self.window.expense_amount.setText("15.25")
+        self.window._register_expense()
+        self.assertEqual(self.window.expenses_table.rowCount(), 1)
+        self.assertEqual(self.window.expenses_table.item(0, 1).text(), "Sobre/Valores")
+        self.assertEqual(self.window.operating_expenses.text(), "$ 15.25")
+
     def test_register_and_void_variable_expense_via_interface(self):
         self.window.expense_type.setCurrentText("Gastos variables")
         self.window.expense_description.setText("Papelería")
