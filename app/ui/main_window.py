@@ -224,7 +224,7 @@ class MainWindow(QMainWindow):
         elif indice == 5:
             self.purchase_history_window.refresh()
         elif indice == 6:
-            self.cash_closing_window.refresh()
+            self.cash_closing_window.on_enter()
         elif indice == 7:
             self.cash_closing_history_window.refresh()
         elif indice == 8:
