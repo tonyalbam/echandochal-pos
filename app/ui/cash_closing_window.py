@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
     QHeaderView,
+    QHeaderView,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -203,6 +204,30 @@ class CashClosingWindow(QWidget):
             cash_layout.addWidget(value, summary_row, column * 2 + 1)
         layout.addWidget(cash_group)
 
+        # Flujos observados por medio de pago: no equivalen a los saldos
+        # bancarios sin un saldo inicial y conciliación de cuentas.
+        flows_group = QGroupBox("Movimientos del día por medio de pago")
+        flows_layout = QVBoxLayout(flows_group)
+        self.payment_flows = QTableWidget(3, 4)
+        self.payment_flows.setHorizontalHeaderLabels((
+            "Medio de pago", "Entradas por ventas",
+            "Salidas por compras", "Flujo neto del día",
+        ))
+        self.payment_flows.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.payment_flows.verticalHeader().hide()
+        self.payment_flows.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.payment_flows.setFixedHeight(160)
+        flows_layout.addWidget(self.payment_flows)
+        flows_layout.addWidget(QLabel(
+            "Los flujos de tarjeta y transferencia no son saldos bancarios "
+            "hasta conciliar el saldo inicial y las comisiones."
+        ))
+        layout.addWidget(flows_group)
+
         # Registro de retiros de efectivo; no altera las compras ni las ventas.
         expenses_group = QGroupBox("Gastos operativos de caja chica")
         expenses_layout = QVBoxLayout(expenses_group)
@@ -251,10 +276,12 @@ class CashClosingWindow(QWidget):
         self.opening_cash = QLabel("$ 0.00")
         self.cash_sales = QLabel("$ 0.00")
         self.operating_expenses = QLabel("$ 0.00")
+        self.cash_purchases = QLabel("$ 0.00")
         self.closing_state = QLabel("Corte pendiente de confirmación")
         for index, (label, widget) in enumerate((
             ("Saldo inicial (último corte confirmado)", self.opening_cash),
             ("Entradas por ventas en efectivo (cambio descontado)", self.cash_sales),
+            ("Salidas por compras de mercancía en efectivo", self.cash_purchases),
             ("Salidas por gastos operativos", self.operating_expenses),
             ("Estado del corte", self.closing_state),
         )):
@@ -267,11 +294,11 @@ class CashClosingWindow(QWidget):
         self.initial_fund_button.clicked.connect(self._register_initial_fund)
         fund_row.addWidget(self.initial_fund_amount)
         fund_row.addWidget(self.initial_fund_button)
-        carryover_layout.addWidget(QLabel("Fondo previo a primer corte"), 4, 0)
-        carryover_layout.addLayout(fund_row, 4, 1)
+        carryover_layout.addWidget(QLabel("Fondo previo a primer corte"), 5, 0)
+        carryover_layout.addLayout(fund_row, 5, 1)
         self.confirm_closing_button = QPushButton("Confirmar el corte diario")
         self.confirm_closing_button.clicked.connect(self._confirm_closing)
-        carryover_layout.addWidget(self.confirm_closing_button, 5, 0, 1, 2)
+        carryover_layout.addWidget(self.confirm_closing_button, 6, 0, 1, 2)
         layout.addWidget(carryover_group)
         layout.addStretch()
 
@@ -326,6 +353,22 @@ class CashClosingWindow(QWidget):
         self.operating_expenses.setText(
             f"$ {summary['gastos_centavos'] / 100:,.2f}"
         )
+        self.cash_purchases.setText(
+            f"$ {summary['compras_efectivo_centavos'] / 100:,.2f}"
+        )
+        for row, flow in enumerate(
+            self.petty_cash.get_payment_flows(self._selected_date())
+        ):
+            for column, value in enumerate((
+                flow["metodo_pago"],
+                f"$ {flow['entradas_centavos'] / 100:,.2f}",
+                f"$ {flow['compras_centavos'] / 100:,.2f}",
+                f"$ {flow['flujo_neto_centavos'] / 100:,.2f}",
+            )):
+                cell = QTableWidgetItem(str(value))
+                if column:
+                    cell.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.payment_flows.setItem(row, column, cell)
         self.expenses_table.setRowCount(0)
         for index, expense in enumerate(summary["gastos"]):
             self.expenses_table.insertRow(index)
