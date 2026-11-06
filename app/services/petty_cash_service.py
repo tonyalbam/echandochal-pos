@@ -60,6 +60,59 @@ class PettyCashService:
         )
         return cents(cursor.fetchone()[0])
 
+    def _cash_purchases_cents(self, day):
+        cursor = self.database.cursor()
+        cursor.execute(
+            """SELECT COALESCE(SUM(p.monto_centavos), 0)
+               FROM pagos_compra p
+               JOIN compras c ON c.id = p.compra_id
+               WHERE c.fecha = ? AND p.metodo_pago = 'Efectivo'""",
+            (day,),
+        )
+        return int(cursor.fetchone()[0])
+
+    def get_payment_flows(self, day):
+        """Entradas de ventas y desembolsos de compras por medio.
+
+        Los importes son flujos del día, no saldos de bancos; para un
+        saldo de cuenta se necesita además saldo inicial y conciliación.
+        """
+        day = self._date(day)
+        cursor = self.database.cursor()
+        cursor.execute(
+            """SELECT p.metodo_pago,
+                      ROUND(COALESCE(SUM(p.ventas - p.comisiones), 0), 2)
+               FROM resumen_pagos_venta p
+               JOIN ventas v ON v.id = p.venta_id
+               WHERE v.fecha = ? AND v.cancelada = 0
+               GROUP BY p.metodo_pago""",
+            (day,),
+        )
+        income = {
+            ("Tarjeta" if row[0] == "Mercado Libre" else row[0]): cents(row[1])
+            for row in cursor.fetchall()
+        }
+        cursor.execute(
+            """SELECT p.metodo_pago, COALESCE(SUM(p.monto_centavos), 0)
+               FROM pagos_compra p
+               JOIN compras c ON c.id = p.compra_id
+               WHERE c.fecha = ?
+               GROUP BY p.metodo_pago""",
+            (day,),
+        )
+        purchases = {row[0]: int(row[1]) for row in cursor.fetchall()}
+        return [
+            {
+                "metodo_pago": method,
+                "entradas_centavos": income.get(method, 0),
+                "compras_centavos": purchases.get(method, 0),
+                "flujo_neto_centavos": (
+                    income.get(method, 0) - purchases.get(method, 0)
+                ),
+            }
+            for method in ("Efectivo", "Tarjeta", "Transferencia")
+        ]
+
     def get_initial_fund(self):
         cursor = self.database.cursor()
         cursor.execute("SELECT * FROM fondo_inicial_caja WHERE id = 1")
@@ -98,14 +151,16 @@ class PettyCashService:
             if fund and day >= fund["fecha"] else 0
         )
         sales = self._cash_sales_cents(day)
+        purchases = self._cash_purchases_cents(day)
         expenses = self.get_expenses(day)
         withdrawals = sum(item["monto_centavos"] for item in expenses)
-        expected = opening + sales - withdrawals
+        expected = opening + sales - purchases - withdrawals
         return {
             "fecha": day, "saldo_inicial_centavos": opening,
             "cierre_anterior": last["fecha"] if last else None,
             "fondo_inicial": fund,
             "ventas_efectivo_centavos": sales,
+            "compras_efectivo_centavos": purchases,
             "gastos_centavos": withdrawals,
             "saldo_esperado_centavos": expected,
             "gastos": expenses,
@@ -198,9 +253,17 @@ class PettyCashService:
                 (previous["fecha"], day),
             )
             pending_expense = cursor.fetchone()[0]
-            if pending_sale or pending_expense:
+            cursor.execute(
+                """SELECT MIN(c.fecha) FROM pagos_compra p
+                   JOIN compras c ON c.id = p.compra_id
+                   WHERE c.fecha > ? AND c.fecha < ?
+                     AND p.metodo_pago = 'Efectivo'""",
+                (previous["fecha"], day),
+            )
+            pending_purchase = cursor.fetchone()[0]
+            if pending_sale or pending_expense or pending_purchase:
                 first_pending = min(
-                    value for value in (pending_sale, pending_expense)
+                    value for value in (pending_sale, pending_expense, pending_purchase)
                     if value is not None
                 )
                 raise ValueError(
@@ -226,12 +289,15 @@ class PettyCashService:
             cursor.execute(
                 """INSERT INTO cierres_caja
                    (fecha, saldo_inicial_centavos, ventas_efectivo_centavos,
-                    gastos_centavos, saldo_esperado_centavos, saldo_contado_centavos,
+                    compras_efectivo_centavos, gastos_centavos,
+                    saldo_esperado_centavos, saldo_contado_centavos,
                     conteos_json, morralla_centavos)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (day, summary["saldo_inicial_centavos"],
-                 summary["ventas_efectivo_centavos"], summary["gastos_centavos"],
-                 expected, counted, json.dumps(denominations), cents(loose_change)),
+                 summary["ventas_efectivo_centavos"],
+                 summary["compras_efectivo_centavos"],
+                 summary["gastos_centavos"], expected, counted,
+                 json.dumps(denominations), cents(loose_change)),
             )
             self.database.commit()
         except Exception:
