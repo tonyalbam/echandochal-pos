@@ -370,6 +370,7 @@ class CashClosingWindow(QWidget):
 
         self._create_general_cut_form()
         self._create_profit_hover_popup()
+        self.tabs.currentChanged.connect(self._tab_changed)
 
     def _create_general_cut_form(self) -> None:
         """Captura manual y conciliación del saldo real por medio de pago."""
@@ -757,6 +758,17 @@ class CashClosingWindow(QWidget):
             QTimer.singleShot(230, self._maybe_hide_profit_popup)
         return super().eventFilter(watched, event)
 
+    def _tab_changed(self, index: int) -> None:
+        """Mostrar siempre un resumen actualizado al cambiar de pestaña.
+
+        En particular, el corte general debe reconocer un corte de caja chica
+        confirmado sin necesidad de salir de la sección ni pulsar Actualizar.
+        """
+        if index == 3:
+            self._refresh_general_closing()
+        elif index == 0:
+            self._refresh_concept_movements()
+
     def on_enter(self) -> None:
         """Abrir siempre en Corte general entradas/salidas."""
         self.tabs.setCurrentIndex(0)
@@ -1014,6 +1026,8 @@ class CashClosingWindow(QWidget):
             QMessageBox.warning(self, "No se pudo cerrar", str(error))
             return
         self._refresh_petty_cash()
+        self._refresh_concept_movements()
+        self._refresh_general_closing()
         self._update_cash_reconciliation()
         QMessageBox.information(
             self, "Corte confirmado",
