@@ -181,22 +181,25 @@ class GeneralClosingTest(unittest.TestCase):
         self.assertEqual(data["gasto_variable"]["acumulado_centavos"], 0)
 
     def test_skipped_day_with_transactions_cannot_be_ignored(self):
-        self.petty.register_initial_fund(self.prior, 100)
+        first = (date.today() - timedelta(days=2)).isoformat()
+        middle = (date.today() - timedelta(days=1)).isoformat()
+        self.petty.register_initial_fund(first, 100)
         self.petty.confirm_closing(
-            self.prior, {("Billete", 100.0): 1}, 0
+            first, {("Billete", 100.0): 1}, 0
         )
         self.service.confirm(
-            self.prior,
+            first,
             {"Efectivo": 100, "Tarjeta": 100, "Transferencia": 100},
             {"Tarjeta": 100, "Transferencia": 100},
         )
-        self.sale(self.day, cash=0, card=50)
-        future = (date.today() + timedelta(days=1)).isoformat()
-        # Crear un cierre ficticio de caja chica para la fecha futura no
-        # aplica: la verificación de no saltar días ocurre en el servicio.
-        with self.assertRaisesRegex(ValueError, "Primero confirma"):
+        self.sale(middle, cash=0, card=50)
+        # Aún se puede cerrar el efectivo del día actual, sin entradas cash.
+        self.petty.confirm_closing(
+            self.day, {("Billete", 100.0): 1}, 0
+        )
+        with self.assertRaisesRegex(ValueError, "sin corte general"):
             self.service.confirm(
-                future,
+                self.day,
                 {"Efectivo": 100, "Tarjeta": 150, "Transferencia": 100},
                 {},
             )
