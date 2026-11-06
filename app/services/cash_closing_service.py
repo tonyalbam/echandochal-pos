@@ -298,7 +298,7 @@ class CashClosingService:
             ("DINERO NETO", data["dinero_neto"], money),
             ("Número de tickets", data["numero_tickets"], "#,##0"),
             ("Productos vendidos", data["productos_vendidos"], "#,##0.###"),
-            ("Utilidad del día", data["utilidad"], money),
+            ("Utilidad operativa del día", data["utilidad"], money),
         )
         for row_number, (label, value, number_format) in enumerate(
             summary, start=9
@@ -372,6 +372,41 @@ class CashClosingService:
             sheet.cell(index, 1, expense["tipo"])
             sheet.cell(index, 2, expense["descripcion"])
             sheet.cell(index, 3, expense["monto_centavos"] / 100).number_format = money
+
+        profit_sheet = workbook.create_sheet("Desglose utilidad")
+        profit_sheet.append(["Cálculo de la utilidad", "Monto"])
+        profit_lines = (
+            ("Ingresos netos por ventas", data["dinero_neto"]),
+            ("(-) Costo de mercancía vendida", data["costo"]),
+            ("(=) Utilidad bruta después de comisiones", data["utilidad_bruta"]),
+            ("(-) Gastos fijos", data["gastos_fijos"]),
+            ("(-) Gastos variables", data["gastos_variables"]),
+            ("(=) Utilidad operativa estimada", data["utilidad"]),
+            ("Sobre/Valores: traspaso, no gasto", data["sobre_valores"]),
+        )
+        for label, amount in profit_lines:
+            profit_sheet.append([label, amount])
+            profit_sheet.cell(profit_sheet.max_row, 2).number_format = money
+        profit_sheet.cell(11, 1, "Costo histórico de los productos vendidos")
+        for col, header in enumerate((
+            "Código", "Producto", "Cantidad", "Costo unitario", "Costo total",
+        ), start=1):
+            profit_sheet.cell(12, col, header).font = white_bold
+            profit_sheet.cell(12, col).fill = dark_fill
+        for rownum, product in enumerate(
+            self.get_sold_cost_breakdown(closing_date), start=13
+        ):
+            for col, value in enumerate((
+                product["codigo"], product["producto"],
+                product["cantidad"], product["costo_unitario"],
+                product["costo_total"],
+            ), start=1):
+                cell = profit_sheet.cell(rownum, col, value)
+                if col in (4, 5):
+                    cell.number_format = money
+        for col, width in enumerate((46, 34, 17, 19, 19), start=1):
+            profit_sheet.column_dimensions[get_column_letter(col)].width = width
+        profit_sheet.freeze_panes = "A12"
 
         flows_sheet = workbook.create_sheet("Flujos por medio")
         flows_sheet.append([
@@ -457,7 +492,7 @@ class CashClosingService:
             ["DINERO NETO", f"${data['dinero_neto']:,.2f}"],
             ["Número de tickets", str(data["numero_tickets"])],
             ["Productos vendidos", f"{data['productos_vendidos']:g}"],
-            ["Utilidad del día", f"${data['utilidad']:,.2f}"],
+            ["Utilidad operativa del día", f"${data['utilidad']:,.2f}"],
         ]
         summary_table = Table(summary_data, colWidths=[70 * mm, 45 * mm])
         summary_table.setStyle(TableStyle([
@@ -468,6 +503,54 @@ class CashClosingService:
             ("PADDING", (0, 0), (-1, -1), 4),
         ]))
         story.append(summary_table)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("<b>Desglose de utilidad</b>", styles["Heading2"]))
+        profit_data = [
+            ["Ingresos netos de ventas", f"$ {data['dinero_neto']:,.2f}"],
+            ["(-) Costo vendido", f"$ {data['costo']:,.2f}"],
+            ["(=) Utilidad bruta", f"$ {data['utilidad_bruta']:,.2f}"],
+            ["(-) Gastos fijos", f"$ {data['gastos_fijos']:,.2f}"],
+            ["(-) Gastos variables", f"$ {data['gastos_variables']:,.2f}"],
+            ["(=) Utilidad operativa", f"$ {data['utilidad']:,.2f}"],
+            ["Sobre/Valores (traspaso)", f"$ {data['sobre_valores']:,.2f}"],
+        ]
+        profit_table = Table(profit_data, colWidths=[95 * mm, 40 * mm])
+        profit_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#D9EAF7")),
+        ]))
+        story.append(profit_table)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("<b>Costos históricos de productos vendidos</b>",
+                               styles["Heading2"]))
+        cost_data = [["Código", "Producto", "Cantidad", "Costo", "Costo total"]]
+        for product in self.get_sold_cost_breakdown(closing_date):
+            cost_data.append([
+                product["codigo"], Paragraph(
+                    str(product["producto"]), styles["Normal"]
+                ),
+                f"{product['cantidad']:g}",
+                f"$ {product['costo_unitario']:,.2f}",
+                f"$ {product['costo_total']:,.2f}",
+            ])
+        cost_table = Table(cost_data, colWidths=[
+            29 * mm, 57 * mm, 19 * mm, 30 * mm, 30 * mm,
+        ], repeatRows=1)
+        cost_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+        ]))
+        story.append(cost_table)
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(
+            "Compras para inventario y Sobre/Valores son movimientos de "
+            "fondos; no se descuentan directamente de la utilidad.",
+            styles["Normal"],
+        ))
         story.append(Spacer(1, 4 * mm))
         story.append(Paragraph("<b>Arqueo manual de efectivo</b>", styles["Heading2"]))
         cash_data = [["Tipo", "Denominación", "Cantidad", "Importe"]]
