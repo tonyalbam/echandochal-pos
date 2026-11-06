@@ -1,5 +1,6 @@
 """Historial de cierres de efectivo y movimientos de caja chica."""
-from datetime import date
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -15,6 +16,22 @@ MONTHS = (
     "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 )
+
+
+def local_timestamp(value):
+    """Muestra el instante UTC de SQLite en horario de México.
+
+    SQLite CURRENT_TIMESTAMP registra UTC sin sufijo horario; convertir
+    solamente al presentarlo evita modificar los datos históricos.
+    """
+    if not value:
+        return ""
+    instant = datetime.fromisoformat(value)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    return instant.astimezone(ZoneInfo("America/Mexico_City")).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
 
 def money(cents):
@@ -105,11 +122,13 @@ class CashClosingHistoryWindow(QWidget):
             ("ventas_efectivo_centavos", "Ventas en efectivo (cambio descontado)"),
             ("gastos_centavos", "Gastos operativos"),
             ("saldo_esperado_centavos", "Efectivo esperado"),
-            ("saldo_contado_centavos", "Efectivo contado"),
+            ("saldo_contado_centavos", "Monto de efectivo que debe tener la caja chica"),
         )
         for index, (key, label) in enumerate(field_names):
             position, col = divmod(index, 3)
-            grid.addWidget(QLabel(label), position * 2, col)
+            title = QLabel(label)
+            title.setWordWrap(True)
+            grid.addWidget(title, position * 2, col)
             value = QLabel("$ 0.00")
             value.setStyleSheet("font-size: 16px; font-weight: bold;")
             grid.addWidget(value, position * 2 + 1, col)
@@ -265,7 +284,7 @@ class CashClosingHistoryWindow(QWidget):
             widget.setText(money(detail[key]))
         closing = detail["cierre"]
         self.confirmation.setText(
-            f"CONFIRMADO el {closing['confirmado_en']}"
+            f"CONFIRMADO el {local_timestamp(closing['confirmado_en'])}"
             if closing else "PENDIENTE de confirmar"
         )
         self.expenses.setRowCount(len(detail["gastos"]))
@@ -273,8 +292,8 @@ class CashClosingHistoryWindow(QWidget):
             values = (
                 expense["tipo"], expense["descripcion"],
                 money(expense["monto_centavos"]),
-                "ANULADO" if expense["anulado"] else "REGISTRADO",
-                expense["creado_en"],
+                "CANCELADA" if expense["anulado"] else "REGISTRADO",
+                local_timestamp(expense["creado_en"]),
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
