@@ -1,6 +1,6 @@
 """Historial de cierres de efectivo y movimientos de caja chica."""
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -29,7 +29,16 @@ def local_timestamp(value):
     instant = datetime.fromisoformat(value)
     if instant.tzinfo is None:
         instant = instant.replace(tzinfo=timezone.utc)
-    return instant.astimezone(ZoneInfo("America/Mexico_City")).strftime(
+    try:
+        mexico_timezone = ZoneInfo("America/Mexico_City")
+    except ZoneInfoNotFoundError:
+        # En Windows puede faltar tzdata en un entorno virtual antiguo.
+        # Ciudad de México es UTC-6 sin horario de verano desde 2023.
+        # Para registros anteriores no inventar una hora local incorrecta.
+        if instant.year < 2023:
+            return instant.strftime("%Y-%m-%d %H:%M:%S UTC")
+        mexico_timezone = timezone(timedelta(hours=-6))
+    return instant.astimezone(mexico_timezone).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
