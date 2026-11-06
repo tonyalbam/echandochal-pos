@@ -310,6 +310,7 @@ class PettyCashTest(unittest.TestCase):
             "FROM gastos_caja WHERE id = 15"
         ).fetchone()
         self.assertEqual(tuple(saved), (15, "Gastos variables", "Papelería", 500, 1))
+        self.add_sale("2026-10-01", 20, 20)
         expense_id = self.service.add_expense(
             "2026-10-01", "Sobre/Valores", "Sobre resguardado", 2
         )
