@@ -64,6 +64,18 @@ class PurchaseDetailDialog(QDialog):
                 table.setItem(row, column, QTableWidgetItem(str(value)))
 
         layout.addWidget(table)
+        payments_title = QLabel("Cómo se pagó la compra")
+        payments_title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(payments_title)
+        if purchase.get("pagos"):
+            for payment in purchase["pagos"]:
+                layout.addWidget(QLabel(
+                    f"{payment['metodo_pago']}: $ {payment['monto']:,.2f}"
+                ))
+        else:
+            layout.addWidget(QLabel(
+                "Sin desglose disponible (compra registrada en versión anterior)."
+            ))
         total = QLabel(f"Total: $ {purchase['total']:,.2f}")
         total.setAlignment(Qt.AlignmentFlag.AlignRight)
         total.setStyleSheet("font-size: 17px; font-weight: bold;")
@@ -136,9 +148,9 @@ class PurchaseHistoryWindow(QWidget):
         period_layout.addStretch()
         layout.addLayout(period_layout)
 
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
-            ["Folio", "Fecha", "Proveedor", "Subtotal", "Total", "Notas"]
+            ["Folio", "Fecha", "Proveedor", "Subtotal", "Total", "Pago", "Notas"]
         )
         self.table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
@@ -149,7 +161,7 @@ class PurchaseHistoryWindow(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.doubleClicked.connect(self._show_detail)
         self.table.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.ResizeMode.Stretch
+            6, QHeaderView.ResizeMode.Stretch
         )
         self.table.horizontalHeader().sectionDoubleClicked.connect(
             self._sort_purchases
@@ -229,6 +241,7 @@ class PurchaseHistoryWindow(QWidget):
             (lambda p: p["proveedor"], False),
             (lambda p: p["subtotal"], True),
             (lambda p: p["total"], True),
+            (lambda p: p["formas_pago"], False),
             (lambda p: p["notas"] or "", False),
         )
         sort_records(self.purchases, column, ascending, keys)
@@ -240,7 +253,8 @@ class PurchaseHistoryWindow(QWidget):
             values = (
                 purchase["folio"], purchase["fecha"], purchase["proveedor"],
                 f"$ {purchase['subtotal']:,.2f}",
-                f"$ {purchase['total']:,.2f}", purchase["notas"] or "",
+                f"$ {purchase['total']:,.2f}",
+                purchase["formas_pago"], purchase["notas"] or "",
             )
             for column, value in enumerate(values):
                 self.table.setItem(row, column, SortableItem(str(value), numeric=column in (3, 4)))
