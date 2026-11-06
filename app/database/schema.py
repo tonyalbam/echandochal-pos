@@ -238,6 +238,7 @@ def create_database(db: Database) -> None:
             fecha TEXT PRIMARY KEY,
             saldo_inicial_centavos INTEGER NOT NULL CHECK (saldo_inicial_centavos >= 0),
             ventas_efectivo_centavos INTEGER NOT NULL CHECK (ventas_efectivo_centavos >= 0),
+            compras_efectivo_centavos INTEGER NOT NULL DEFAULT 0 CHECK (compras_efectivo_centavos >= 0),
             gastos_centavos INTEGER NOT NULL CHECK (gastos_centavos >= 0),
             saldo_esperado_centavos INTEGER NOT NULL CHECK (saldo_esperado_centavos >= 0),
             saldo_contado_centavos INTEGER NOT NULL CHECK (saldo_contado_centavos >= 0),
@@ -253,6 +254,11 @@ def create_database(db: Database) -> None:
     if "conteos_json" not in closing_columns:
         cursor.execute(
             "ALTER TABLE cierres_caja ADD COLUMN conteos_json TEXT NOT NULL DEFAULT '{}'"
+        )
+    if "compras_efectivo_centavos" not in closing_columns:
+        cursor.execute(
+            "ALTER TABLE cierres_caja ADD COLUMN "
+            "compras_efectivo_centavos INTEGER NOT NULL DEFAULT 0"
         )
     if "morralla_centavos" not in closing_columns:
         cursor.execute(
