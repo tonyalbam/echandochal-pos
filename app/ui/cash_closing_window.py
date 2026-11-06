@@ -1,8 +1,10 @@
 from app.ui.theme import theme_colors
-from PySide6.QtCore import QDate, Qt, QRegularExpression
-from PySide6.QtGui import QRegularExpressionValidator
+from PySide6.QtCore import QDate, QEvent, Qt, QRegularExpression, QTimer
+from PySide6.QtGui import QCursor, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QDateEdit,
+    QApplication,
+    QFrame,
     QDialog,
     QComboBox,
     QScrollArea,
@@ -16,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QTableWidget,
+    QTabWidget,
     QTableWidgetItem,
     QSizePolicy,
     QAbstractItemView,
@@ -26,6 +29,8 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.cash_closing_service import CashClosingService
 from app.services.petty_cash_service import PettyCashService
+from app.services.general_closing_service import GeneralClosingService
+from app.ui.sale_window import PaymentAmountInput
 
 
 class ClearOnFocusAmount(QLineEdit):
@@ -68,6 +73,9 @@ class CashClosingWindow(QWidget):
         super().__init__(parent)
         self.service = CashClosingService(database)
         self.petty_cash = PettyCashService(database)
+        self.general_service = GeneralClosingService(database)
+        self._profit_popup = None
+        self._profit_hover_targets = []
         self._create_ui()
         self.refresh()
 
@@ -158,42 +166,63 @@ class CashClosingWindow(QWidget):
             container.addWidget(value_label)
             summary_grid.addLayout(container, row, column)
             self.values[key] = value_label
+            if key == "utilidad":
+                self._profit_hover_targets = [title_label, value_label]
+                for widget in self._profit_hover_targets:
+                    widget.setMouseTracking(True)
+                    widget.setCursor(Qt.CursorShape.WhatsThisCursor)
+                    widget.installEventFilter(self)
         layout.addLayout(summary_grid)
 
-        # Transparencia: utilidad NO es dinero disponible en caja.
-        # Inventario comprado y traspasos Sobre/Valores son movimientos
-        # de recursos, no gastos deducibles en este indicador.
-        profit_group = QGroupBox("Cómo se calcula la utilidad del día")
-        profit_layout = QGridLayout(profit_group)
-        self.profit_values = {}
-        profit_fields = (
-            ("dinero_neto", "Ingresos netos de ventas"),
-            ("costo", "(-) Costo de mercancía vendida"),
-            ("utilidad_bruta", "(=) Utilidad bruta después de comisiones"),
-            ("gastos_operativos", "(-) Gastos fijos y variables"),
-            ("utilidad_operativa", "(=) Utilidad operativa estimada"),
-            ("sobre_valores", "Sobre/Valores: traspaso de caja, no gasto"),
+        # Las pestañas empiezan exactamente donde antes comenzaba el arqueo.
+        # La vista de entradas/salidas es la primera y predeterminada.
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("daily_closing_tabs")
+        layout.addWidget(self.tabs, 1)
+
+        self.general_flows_tab = QWidget()
+        self.general_flows_layout = QVBoxLayout(self.general_flows_tab)
+        self.tabs.addTab(self.general_flows_tab, "Corte general entradas/salidas")
+
+        self.cash_tab = QWidget()
+        self.cash_tab_layout = QVBoxLayout(self.cash_tab)
+        self.tabs.addTab(self.cash_tab, "Arqueo manual de efectivo")
+
+        self.petty_tab = QWidget()
+        self.petty_tab_layout = QVBoxLayout(self.petty_tab)
+        self.tabs.addTab(self.petty_tab, "Caja chica")
+
+        self.general_cut_tab = QWidget()
+        self.general_cut_layout = QVBoxLayout(self.general_cut_tab)
+        self.tabs.addTab(self.general_cut_tab, "Corte general")
+        self.tabs.setCurrentIndex(0)
+
+        accumulated_group = QGroupBox("Movimientos acumulados por concepto")
+        accumulated_layout = QVBoxLayout(accumulated_group)
+        self.concepts_table = QTableWidget(len(self.general_service.CONCEPTS), 4)
+        self.concepts_table.setObjectName("accumulated_concepts")
+        self.concepts_table.setHorizontalHeaderLabels((
+            "Concepto", "Tipo", "Importe del día", "Acumulado hasta la fecha",
+        ))
+        self.concepts_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
         )
-        for index, (key, label) in enumerate(profit_fields):
-            row, column = divmod(index, 3)
-            heading = QLabel(label)
-            heading.setWordWrap(True)
-            amount = QLabel("$ 0.00")
-            amount.setStyleSheet("font-size: 16px; font-weight: bold;")
-            profit_layout.addWidget(heading, row * 2, column)
-            profit_layout.addWidget(amount, row * 2 + 1, column)
-            self.profit_values[key] = amount
-        explanation = QLabel(
-            "Las compras de mercancía son inventario y afectan la utilidad "
-            "al vender sus productos. Los retiros Sobre/Valores afectan "
-            "el efectivo de caja, no la utilidad."
+        self.concepts_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.NoSelection
         )
-        explanation.setWordWrap(True)
-        profit_layout.addWidget(explanation, 4, 0, 1, 3)
-        self.cost_detail_button = QPushButton("Ver costo de productos vendidos")
-        self.cost_detail_button.clicked.connect(self._show_cost_breakdown)
-        profit_layout.addWidget(self.cost_detail_button, 5, 0, 1, 3)
-        layout.addWidget(profit_group)
+        self.concepts_table.verticalHeader().hide()
+        self.concepts_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.concepts_table.setMinimumHeight(330)
+        accumulated_layout.addWidget(self.concepts_table)
+        self.accumulated_summary = QLabel()
+        self.accumulated_summary.setWordWrap(True)
+        self.accumulated_summary.setStyleSheet(
+            "font-size: 14px; font-weight: bold;"
+        )
+        accumulated_layout.addWidget(self.accumulated_summary)
+        self.general_flows_layout.addWidget(accumulated_group)
 
         cash_group = QGroupBox("Arqueo manual de efectivo")
         cash_layout = QGridLayout(cash_group)
@@ -237,7 +266,8 @@ class CashClosingWindow(QWidget):
             cash_layout.addWidget(QLabel(title), summary_row, column * 2)
             value.setStyleSheet("font-size: 16px; font-weight: bold;")
             cash_layout.addWidget(value, summary_row, column * 2 + 1)
-        layout.addWidget(cash_group)
+        self.cash_tab_layout.addWidget(cash_group)
+        self.cash_tab_layout.addStretch()
 
         # Flujos observados por medio de pago: no equivalen a los saldos
         # bancarios sin un saldo inicial y conciliación de cuentas.
@@ -261,7 +291,8 @@ class CashClosingWindow(QWidget):
             "Los flujos de tarjeta y transferencia no son saldos bancarios "
             "hasta conciliar el saldo inicial y las comisiones."
         ))
-        layout.addWidget(flows_group)
+        self.general_flows_layout.addWidget(flows_group)
+        self.general_flows_layout.addStretch()
 
         # Registro de retiros de efectivo; no altera las compras ni las ventas.
         expenses_group = QGroupBox("Gastos operativos de caja chica")
@@ -304,7 +335,7 @@ class CashClosingWindow(QWidget):
         expense_actions.addWidget(self.remove_expense_button)
         expense_actions.addStretch()
         expenses_layout.addLayout(expense_actions)
-        layout.addWidget(expenses_group)
+        self.petty_tab_layout.addWidget(expenses_group)
 
         carryover_group = QGroupBox("Control de caja chica y confirmación del corte")
         carryover_layout = QGridLayout(carryover_group)
@@ -334,8 +365,11 @@ class CashClosingWindow(QWidget):
         self.confirm_closing_button = QPushButton("Confirmar el corte diario")
         self.confirm_closing_button.clicked.connect(self._confirm_closing)
         carryover_layout.addWidget(self.confirm_closing_button, 6, 0, 1, 2)
-        layout.addWidget(carryover_group)
-        layout.addStretch()
+        self.petty_tab_layout.addWidget(carryover_group)
+        self.petty_tab_layout.addStretch()
+
+        self._create_general_cut_form()
+        self._create_profit_hover_popup()
 
     def _selected_date(self) -> str:
         return self.date.date().toString("yyyy-MM-dd")
@@ -348,6 +382,11 @@ class CashClosingWindow(QWidget):
         self.loose_change.blockSignals(True)
         self.loose_change.clear()
         self.loose_change.blockSignals(False)
+        for field in (*self.general_openings.values(), *self.general_actual.values()):
+            field.clear()
+        self.general_notes.clear()
+        if self._profit_popup and self._profit_popup.isVisible():
+            self._profit_popup.hide()
         self.refresh()
 
     def refresh(self) -> None:
@@ -377,6 +416,8 @@ class CashClosingWindow(QWidget):
             f"{data['productos_vendidos']:g}"
         )
         self._refresh_petty_cash()
+        self._refresh_concept_movements()
+        self._refresh_general_closing()
         self._update_cash_reconciliation()
 
     def _build_cost_breakdown_dialog(self) -> QDialog:
