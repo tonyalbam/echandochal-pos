@@ -313,6 +313,33 @@ def create_database(db: Database) -> None:
             "CREATE INDEX idx_gastos_caja_fecha ON gastos_caja(fecha)"
         )
 
+    # Corte general, independiente del arqueo de efectivo. Saldo real y
+    # diferencias por medio quedan registrados como instantánea histórica.
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS cortes_generales (
+            fecha TEXT PRIMARY KEY,
+            notas TEXT NOT NULL DEFAULT '',
+            confirmado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS detalle_corte_general (
+            fecha TEXT NOT NULL,
+            metodo_pago TEXT NOT NULL CHECK (
+                metodo_pago IN ('Efectivo', 'Tarjeta', 'Transferencia')
+            ),
+            saldo_inicial_centavos INTEGER NOT NULL CHECK (saldo_inicial_centavos >= 0),
+            entradas_centavos INTEGER NOT NULL CHECK (entradas_centavos >= 0),
+            compras_centavos INTEGER NOT NULL CHECK (compras_centavos >= 0),
+            otras_salidas_centavos INTEGER NOT NULL CHECK (otras_salidas_centavos >= 0),
+            saldo_esperado_centavos INTEGER NOT NULL,
+            saldo_real_centavos INTEGER NOT NULL CHECK (saldo_real_centavos >= 0),
+            diferencia_centavos INTEGER NOT NULL,
+            PRIMARY KEY (fecha, metodo_pago),
+            FOREIGN KEY (fecha) REFERENCES cortes_generales(fecha) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_detalle_corte_general_fecha
+            ON detalle_corte_general(fecha);
+    """)
+
     # Catálogo configurable de unidades; conserva los textos ya utilizados.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS unidades (
