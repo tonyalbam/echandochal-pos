@@ -60,6 +60,7 @@ class CashClosingHistoryService:
                     "fecha": day, "confirmado": True,
                     "saldo_inicial_centavos": closing["saldo_inicial_centavos"],
                     "ventas_efectivo_centavos": closing["ventas_efectivo_centavos"],
+                    "compras_efectivo_centavos": closing["compras_efectivo_centavos"],
                     "gastos_centavos": closing["gastos_centavos"],
                     "saldo_esperado_centavos": closing["saldo_esperado_centavos"],
                     "saldo_contado_centavos": closing["saldo_contado_centavos"],
@@ -71,6 +72,7 @@ class CashClosingHistoryService:
                     "fecha": day, "confirmado": False,
                     "saldo_inicial_centavos": snapshot["saldo_inicial_centavos"],
                     "ventas_efectivo_centavos": snapshot["ventas_efectivo_centavos"],
+                    "compras_efectivo_centavos": snapshot["compras_efectivo_centavos"],
                     "gastos_centavos": snapshot["gastos_centavos"],
                     "saldo_esperado_centavos": snapshot["saldo_esperado_centavos"],
                     "saldo_contado_centavos": None, "confirmado_en": None,
@@ -93,19 +95,23 @@ class CashClosingHistoryService:
         if closing:
             opening = closing["saldo_inicial_centavos"]
             sales = closing["ventas_efectivo_centavos"]
+            purchases = closing["compras_efectivo_centavos"]
             withdrawals = closing["gastos_centavos"]
             expected = closing["saldo_esperado_centavos"]
         else:
             snapshot = self.petty_cash.get_summary(day)
             opening = snapshot["saldo_inicial_centavos"]
             sales = snapshot["ventas_efectivo_centavos"]
+            purchases = snapshot["compras_efectivo_centavos"]
             withdrawals = snapshot["gastos_centavos"]
             expected = snapshot["saldo_esperado_centavos"]
         return {
             "fecha": day, "cierre": closing, "gastos": expenses,
             "saldo_inicial_centavos": opening,
             "ventas_efectivo_centavos": sales,
+            "compras_efectivo_centavos": purchases,
             "gastos_centavos": withdrawals,
+            "flujos_medios": self.petty_cash.get_payment_flows(day),
             "saldo_esperado_centavos": expected,
             "saldo_contado_centavos": (
                 closing["saldo_contado_centavos"] if closing else None
@@ -122,6 +128,9 @@ class CashClosingHistoryService:
                 row["ventas_efectivo_centavos"] for row in ordered
             ),
             "gastos_centavos": sum(row["gastos_centavos"] for row in ordered),
+            "compras_efectivo_centavos": sum(
+                row["compras_efectivo_centavos"] for row in ordered
+            ),
             # Los saldos inicial/final son posiciones, no flujos sumables.
             "saldo_inicial_centavos": (
                 ordered[0]["saldo_inicial_centavos"] if ordered else 0
