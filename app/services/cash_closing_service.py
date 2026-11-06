@@ -114,6 +114,28 @@ class CashClosingService:
         net_money = float(row["dinero_neto"])
         cost = float(row["costo"])
 
+        # Gastos pagados con caja chica: sólo los operativos reducen
+        # la utilidad. "Sobre/Valores" es retiro/traspaso de efectivo,
+        # no un gasto del negocio. Las compras son inventario, no
+        # costo de ventas hasta que esos productos se venden.
+        cursor.execute(
+            """SELECT tipo, COALESCE(SUM(monto_centavos), 0) AS centavos
+               FROM gastos_caja
+               WHERE fecha = ? AND anulado = 0
+               GROUP BY tipo""",
+            (closing_date,),
+        )
+        expenses = {
+            item["tipo"]: int(item["centavos"]) / 100
+            for item in cursor.fetchall()
+        }
+        fixed_expenses = expenses.get("Gastos Fijos", 0.0)
+        variable_expenses = expenses.get("Gastos variables", 0.0)
+        transfers_to_envelope = expenses.get("Sobre/Valores", 0.0)
+        operational_expenses = round(fixed_expenses + variable_expenses, 2)
+        gross_profit = round(net_money - cost, 2)
+        operating_profit = round(gross_profit - operational_expenses, 2)
+
         return {
             "fecha": closing_date,
             "formas_pago": payments,
@@ -123,8 +145,40 @@ class CashClosingService:
             "numero_tickets": int(row["tickets"]),
             "productos_vendidos": round(products_sold, 3),
             "costo": round(cost, 2),
-            "utilidad": round(sales - commissions - cost, 2),
+            "utilidad_bruta": gross_profit,
+            "gastos_fijos": fixed_expenses,
+            "gastos_variables": variable_expenses,
+            "gastos_operativos": operational_expenses,
+            "sobre_valores": transfers_to_envelope,
+            "utilidad_operativa": operating_profit,
+            # Compatibilidad: la "Utilidad del día" ahora refleja los
+            # gastos operativos, sin descontar adquisiciones de inventario.
+            "utilidad": operating_profit,
         }
+
+    def get_sold_cost_breakdown(self, closing_date: str) -> list[dict]:
+        """Auditoría del costo realmente registrado al vender cada producto.
+
+        Se utiliza detalle_venta.costo_unitario histórico, nunca el costo
+        actual del catálogo, que puede cambiar con nuevas compras.
+        """
+        cursor = self.database.cursor()
+        cursor.execute(
+            """SELECT
+                   COALESCE(p.codigo, 'HISTÓRICO') AS codigo,
+                   COALESCE(p.nombre, 'Producto histórico') AS producto,
+                   COALESCE(SUM(dv.cantidad), 0) AS cantidad,
+                   dv.costo_unitario AS costo_unitario,
+                   ROUND(SUM(dv.cantidad * dv.costo_unitario), 2) AS costo_total
+               FROM detalle_venta dv
+               JOIN ventas v ON v.id = dv.venta_id
+               LEFT JOIN productos p ON p.id = dv.producto_id
+               WHERE v.fecha = ? AND v.cancelada = 0
+               GROUP BY dv.producto_id, dv.costo_unitario
+               ORDER BY producto COLLATE NOCASE, dv.costo_unitario""",
+            (closing_date,),
+        )
+        return [dict(item) for item in cursor.fetchall()]
 
     def calculate_cash_reconciliation(
         self,
