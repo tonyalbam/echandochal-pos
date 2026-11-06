@@ -109,6 +109,42 @@ class GeneralTabsUiTest(unittest.TestCase):
                          "$ 0.00")
         self.assertIn("Acumulado", self.window.accumulated_summary.text())
 
+    def test_confirming_cash_refreshes_general_cut_without_manual_update(self):
+        """Regresión: Caja chica CONFIRMADO y Corte general bloqueado."""
+        today = date.today().isoformat()
+        service = PettyCashService(self.db)
+        service.register_initial_fund(today, 100)
+        self.window.refresh()
+        self.window.tabs.setCurrentIndex(3)
+        self.assertFalse(self.window.confirm_general_button.isEnabled())
+        self.window.tabs.setCurrentIndex(2)
+        self.window.cash_inputs[("Billete", 100.0)].setText("1")
+        self.assertEqual(self.window.cash_status.text(), "CUADRA")
+        with patch.object(QMessageBox, "question",
+                          return_value=QMessageBox.StandardButton.Yes), \
+             patch.object(QMessageBox, "information"):
+            self.window._confirm_closing()
+        self.assertEqual(self.window.cash_status.text(), "CONFIRMADO")
+        self.assertTrue(self.window.confirm_general_button.isEnabled())
+        self.assertIn("pendiente", self.window.general_cut_status.text().lower())
+        self.assertNotIn(
+            "Primero confirma el corte de efectivo",
+            self.window.general_cut_status.text()
+        )
+        self.window.tabs.setCurrentIndex(3)
+        self.assertTrue(self.window.confirm_general_button.isEnabled())
+
+    def test_tab_switch_detects_cash_close_from_other_screen(self):
+        """El tab se actualiza aun cuando el cierre cambió fuera de la vista."""
+        today = date.today().isoformat()
+        self.window.tabs.setCurrentIndex(3)
+        self.assertFalse(self.window.confirm_general_button.isEnabled())
+        service = PettyCashService(self.db)
+        service.confirm_closing(today, {}, 0)
+        self.window.tabs.setCurrentIndex(2)
+        self.window.tabs.setCurrentIndex(3)
+        self.assertTrue(self.window.confirm_general_button.isEnabled())
+
     def test_register_general_cut_through_ui_after_cash_count(self):
         today = date.today().isoformat()
         PettyCashService(self.db).register_initial_fund(today, 100)
