@@ -371,6 +371,389 @@ class CashClosingWindow(QWidget):
         self._create_general_cut_form()
         self._create_profit_hover_popup()
 
+    def _create_general_cut_form(self) -> None:
+        """Captura manual y conciliación del saldo real por medio de pago."""
+        hint = QLabel(
+            "El efectivo se concilia contra el corte confirmado de caja chica. "
+            "Para tarjeta y transferencia, el primer corte requiere registrar "
+            "el saldo inicial real. Los siguientes utilizan el saldo real "
+            "confirmado del corte general anterior."
+        )
+        hint.setWordWrap(True)
+        self.general_cut_layout.addWidget(hint)
+        group = QGroupBox("Corte general por medio de pago")
+        form = QGridLayout(group)
+        headings = (
+            "Medio", "Saldo inicial", "Entradas por ventas",
+            "Salidas por compras", "Otras salidas",
+            "Saldo esperado", "Saldo real", "Diferencia",
+        )
+        for col, text in enumerate(headings):
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setStyleSheet("font-weight: bold;")
+            form.addWidget(label, 0, col)
+
+        self.general_openings = {}
+        self.general_initial_labels = {}
+        self.general_actual = {}
+        self.general_real_labels = {}
+        self.general_summary_cells = {}
+        for row, method in enumerate(self.general_service.METHODS, start=1):
+            form.addWidget(QLabel(method), row, 0)
+            starting = QLabel("Pendiente")
+            self.general_initial_labels[method] = starting
+            opening_field = PaymentAmountInput(self)
+            opening_field.setAccessibleName(
+                f"Saldo inicial de {method}"
+            )
+            opening_field.textChanged.connect(self._update_general_preview)
+            self.general_openings[method] = opening_field
+            if method == "Efectivo":
+                form.addWidget(starting, row, 1)
+                opening_field.hide()
+            else:
+                # Mismo espacio de cuadrícula: campo sólo para primer corte.
+                starting_container = QWidget()
+                starting_layout = QVBoxLayout(starting_container)
+                starting_layout.setContentsMargins(0, 0, 0, 0)
+                starting_layout.addWidget(starting)
+                starting_layout.addWidget(opening_field)
+                form.addWidget(starting_container, row, 1)
+            for col, key in enumerate((
+                "entradas_centavos", "compras_centavos",
+                "otras_salidas_centavos", "saldo_esperado_centavos",
+            ), start=2):
+                value = QLabel("Pendiente")
+                value.setAlignment(Qt.AlignmentFlag.AlignRight)
+                form.addWidget(value, row, col)
+                self.general_summary_cells[(method, key)] = value
+
+            actual = PaymentAmountInput(self)
+            actual.setAccessibleName(f"Saldo real de {method}")
+            actual.textChanged.connect(self._update_general_preview)
+            actual_label = QLabel("")
+            self.general_actual[method] = actual
+            self.general_real_labels[method] = actual_label
+            real_container = QWidget()
+            real_layout = QVBoxLayout(real_container)
+            real_layout.setContentsMargins(0, 0, 0, 0)
+            real_layout.addWidget(actual_label)
+            real_layout.addWidget(actual)
+            form.addWidget(real_container, row, 6)
+
+            difference = QLabel("Pendiente")
+            difference.setAlignment(Qt.AlignmentFlag.AlignRight)
+            form.addWidget(difference, row, 7)
+            self.general_summary_cells[(method, "diferencia_centavos")] = difference
+
+        self.general_cut_layout.addWidget(group)
+        notes_line = QHBoxLayout()
+        notes_line.addWidget(QLabel("Observaciones:"))
+        self.general_notes = QLineEdit()
+        self.general_notes.setPlaceholderText(
+            "Opcional: explicación de diferencias o movimientos"
+        )
+        self.general_notes.setMaxLength(500)
+        notes_line.addWidget(self.general_notes, 1)
+        self.general_cut_layout.addLayout(notes_line)
+        self.general_cut_status = QLabel("Corte general pendiente")
+        self.general_cut_status.setWordWrap(True)
+        self.general_cut_layout.addWidget(self.general_cut_status)
+        self.confirm_general_button = QPushButton("Confirmar corte general")
+        self.confirm_general_button.clicked.connect(self._confirm_general_closing)
+        self.general_cut_layout.addWidget(self.confirm_general_button)
+        self.general_cut_layout.addStretch()
+
+    @staticmethod
+    def _optional_amount(field):
+        value = field.text().strip()
+        if not value:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _money_centavos(value):
+        return "Por conciliar" if value is None else f"$ {value / 100:,.2f}"
+
+    def _refresh_concept_movements(self) -> None:
+        movements = self.general_service.get_concept_movements(
+            self._selected_date()
+        )
+        daily_income = daily_out = cumulative_income = cumulative_out = 0
+        for row, movement in enumerate(movements):
+            daily = movement["dia_centavos"]
+            accrued = movement["acumulado_centavos"]
+            if movement["tipo"] == "Entrada":
+                daily_income += daily
+                cumulative_income += accrued
+            else:
+                daily_out += daily
+                cumulative_out += accrued
+            values = (
+                movement["concepto"], movement["tipo"],
+                self._money_centavos(daily), self._money_centavos(accrued),
+            )
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                if column >= 2:
+                    cell.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.concepts_table.setItem(row, column, cell)
+        self.accumulated_summary.setText(
+            f"Hoy: entradas {self._money_centavos(daily_income)} | "
+            f"salidas {self._money_centavos(daily_out)} | "
+            f"flujo neto {self._money_centavos(daily_income - daily_out)}    "
+            f"Acumulado hasta {self._selected_date()}: "
+            f"entradas {self._money_centavos(cumulative_income)} | "
+            f"salidas {self._money_centavos(cumulative_out)} | "
+            f"flujo neto {self._money_centavos(cumulative_income - cumulative_out)}"
+        )
+
+    def _refresh_general_closing(self) -> None:
+        snapshot = self.general_service.get_summary(self._selected_date())
+        closed = snapshot["cierre"] is not None
+        previous = snapshot["cierre_anterior"] is not None
+        for method in self.general_service.METHODS:
+            self.general_openings[method].setVisible(
+                method != "Efectivo" and not closed and not previous
+            )
+            self.general_initial_labels[method].setVisible(
+                method == "Efectivo" or closed or previous
+            )
+            self.general_actual[method].setVisible(not closed)
+            self.general_real_labels[method].setVisible(closed)
+        if closed:
+            self.general_notes.setText(snapshot["cierre"]["notas"])
+        self.general_notes.setEnabled(not closed)
+        self.confirm_general_button.setEnabled(
+            not closed and snapshot["cierre_caja_chica"] is not None
+        )
+        if closed:
+            self.general_cut_status.setText(
+                f"CORTE GENERAL CONFIRMADO ({snapshot['cierre']['confirmado_en']}). "
+                "Los importes están guardados y no son editables."
+            )
+        elif snapshot["cierre_caja_chica"] is None:
+            self.general_cut_status.setText(
+                "Primero confirma el corte de efectivo en Caja chica."
+            )
+        else:
+            self.general_cut_status.setText(
+                "Corte general pendiente: captura los saldos reales de "
+                "los tres medios de pago."
+            )
+        self._update_general_preview()
+
+    def _update_general_preview(self, *_):
+        if not hasattr(self, "general_actual"):
+            return
+        card = self._optional_amount(self.general_openings["Tarjeta"])
+        transfer = self._optional_amount(self.general_openings["Transferencia"])
+        snapshot = self.general_service.get_summary(
+            self._selected_date(), card, transfer
+        )
+        for row in snapshot["medios"]:
+            method = row["metodo_pago"]
+            starting = row["saldo_inicial_centavos"]
+            self.general_initial_labels[method].setText(
+                self._money_centavos(starting)
+            )
+            for key in (
+                "entradas_centavos", "compras_centavos",
+                "otras_salidas_centavos", "saldo_esperado_centavos",
+            ):
+                self.general_summary_cells[(method, key)].setText(
+                    self._money_centavos(row[key])
+                )
+            if snapshot["cierre"]:
+                actual = row["saldo_real_centavos"]
+                self.general_real_labels[method].setText(
+                    self._money_centavos(actual)
+                )
+                difference = row["diferencia_centavos"]
+            else:
+                actual = self._optional_amount(self.general_actual[method])
+                difference = (
+                    None if actual is None or
+                    row["saldo_esperado_centavos"] is None else
+                    round(actual * 100) - row["saldo_esperado_centavos"]
+                )
+            self.general_summary_cells[(method, "diferencia_centavos")].setText(
+                self._money_centavos(difference)
+            )
+
+    def _confirm_general_closing(self) -> None:
+        day = self._selected_date()
+        actual = {}
+        for method, field in self.general_actual.items():
+            amount = self._optional_amount(field)
+            if amount is None:
+                QMessageBox.warning(
+                    self, "Faltan saldos",
+                    f"Captura el saldo real de {method}."
+                )
+                return
+            actual[method] = amount
+        initial = {
+            method: self._optional_amount(field)
+            for method, field in self.general_openings.items()
+            if method != "Efectivo"
+        }
+        reply = QMessageBox.question(
+            self, "Confirmar corte general",
+            f"¿Confirmar el corte general del {day}?\n\n"
+            "Quedarán guardados los saldos reales y las diferencias "
+            "de efectivo, tarjeta y transferencia. "
+            "Este registro no se podrá editar desde esta pantalla.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.general_service.confirm(
+                day, actual, initial, self.general_notes.text()
+            )
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(
+                self, "No se pudo confirmar el corte general", str(error)
+            )
+            return
+        self._refresh_general_closing()
+        QMessageBox.information(
+            self, "Corte general confirmado",
+            "Se guardaron los saldos y las diferencias de los tres medios."
+        )
+
+    def _create_profit_hover_popup(self):
+        """El mismo desglose de la antigua sección y costos, en una sola ficha."""
+        popup = QFrame(self, Qt.WindowType.ToolTip)
+        popup.setObjectName("profitHoverPopup")
+        popup.setFrameShape(QFrame.Shape.StyledPanel)
+        popup.setAutoFillBackground(True)
+        popup.setMinimumWidth(760)
+        popup.resize(850, 450)
+        popup.installEventFilter(self)
+        main = QVBoxLayout(popup)
+        heading = QLabel("Cómo se calcula la utilidad del día")
+        heading.setStyleSheet("font-size: 18px; font-weight: bold;")
+        main.addWidget(heading)
+        grid = QGridLayout()
+        self.profit_values = {}
+        for index, (key, label) in enumerate((
+            ("dinero_neto", "Ingresos netos por ventas"),
+            ("costo", "(-) Costo de mercancía vendida"),
+            ("utilidad_bruta", "(=) Utilidad bruta después de comisiones"),
+            ("gastos_fijos", "(-) Gastos Fijos"),
+            ("gastos_variables", "(-) Gastos variables"),
+            ("utilidad_operativa", "(=) Utilidad operativa"),
+            ("sobre_valores", "Sobre/Valores: salida de efectivo, no gasto"),
+        )):
+            row, col = divmod(index, 2)
+            container = QVBoxLayout()
+            container.addWidget(QLabel(label))
+            value = QLabel("$ 0.00")
+            value.setStyleSheet("font-size: 16px; font-weight: bold;")
+            container.addWidget(value)
+            self.profit_values[key] = value
+            grid.addLayout(container, row, col)
+        main.addLayout(grid)
+        main.addWidget(QLabel(
+            "Costo de mercancía vendida por producto "
+            "(costo histórico de cada venta):"
+        ))
+        self.profit_cost_table = QTableWidget(0, 5)
+        self.profit_cost_table.setObjectName("hover_cost_details")
+        self.profit_cost_table.setHorizontalHeaderLabels((
+            "Código", "Producto", "Cantidad vendida", "Costo unitario",
+            "Costo de mercancía vendida",
+        ))
+        self.profit_cost_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.profit_cost_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.profit_cost_table.horizontalHeader().setSectionResizeMode(
+            4, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.profit_cost_table.setMinimumHeight(165)
+        main.addWidget(self.profit_cost_table)
+        explanation = QLabel(
+            "La compra de inventario no reduce dos veces la utilidad. "
+            "Los traspasos Sobre/Valores tampoco son gastos operativos."
+        )
+        explanation.setWordWrap(True)
+        main.addWidget(explanation)
+        self._profit_popup = popup
+
+    def _populate_profit_hover(self):
+        data = self.service.get_daily_closing(self._selected_date())
+        for key, widget in self.profit_values.items():
+            widget.setText(f"$ {data[key]:,.2f}")
+        costs = self.service.get_sold_cost_breakdown(self._selected_date())
+        self.profit_cost_table.setRowCount(len(costs))
+        for row, item in enumerate(costs):
+            values = (
+                item["codigo"], item["producto"],
+                f'{item["cantidad"]:g}',
+                f'$ {item["costo_unitario"]:,.2f}',
+                f'$ {item["costo_total"]:,.2f}',
+            )
+            for column, value in enumerate(values):
+                self.profit_cost_table.setItem(
+                    row, column, QTableWidgetItem(str(value))
+                )
+
+    def _show_profit_popup(self, anchor=None):
+        if not self._profit_popup:
+            return
+        anchor = anchor or self._profit_hover_targets[-1]
+        self._populate_profit_hover()
+        self._profit_popup.adjustSize()
+        wanted = anchor.mapToGlobal(anchor.rect().bottomLeft())
+        screen = QApplication.screenAt(wanted) or QApplication.primaryScreen()
+        if screen:
+            bounds = screen.availableGeometry()
+            x = min(max(wanted.x(), bounds.left()), max(
+                bounds.left(), bounds.right() - self._profit_popup.width()
+            ))
+            y = wanted.y() + 5
+            if y + self._profit_popup.height() > bounds.bottom():
+                y = max(bounds.top(), anchor.mapToGlobal(
+                    anchor.rect().topLeft()
+                ).y() - self._profit_popup.height() - 5)
+            self._profit_popup.move(x, y)
+        else:
+            self._profit_popup.move(wanted)
+        self._profit_popup.show()
+
+    def _maybe_hide_profit_popup(self):
+        if not self._profit_popup or not self._profit_popup.isVisible():
+            return
+        point = QCursor.pos()
+        popup_local = self._profit_popup.mapFromGlobal(point)
+        if self._profit_popup.rect().contains(popup_local):
+            return
+        for target in self._profit_hover_targets:
+            local = target.mapFromGlobal(point)
+            if target.rect().contains(local):
+                return
+        self._profit_popup.hide()
+
+    def eventFilter(self, watched, event):
+        if watched in self._profit_hover_targets:
+            if event.type() == QEvent.Type.Enter:
+                self._show_profit_popup(watched)
+            elif event.type() == QEvent.Type.Leave:
+                QTimer.singleShot(230, self._maybe_hide_profit_popup)
+        elif watched is self._profit_popup and event.type() == QEvent.Type.Leave:
+            QTimer.singleShot(230, self._maybe_hide_profit_popup)
+        return super().eventFilter(watched, event)
+
     def _selected_date(self) -> str:
         return self.date.date().toString("yyyy-MM-dd")
 
