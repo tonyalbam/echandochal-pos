@@ -757,6 +757,11 @@ class CashClosingWindow(QWidget):
             QTimer.singleShot(230, self._maybe_hide_profit_popup)
         return super().eventFilter(watched, event)
 
+    def on_enter(self) -> None:
+        """Abrir siempre en Corte general entradas/salidas."""
+        self.tabs.setCurrentIndex(0)
+        self.refresh()
+
     def _selected_date(self) -> str:
         return self.date.date().toString("yyyy-MM-dd")
 
@@ -826,7 +831,7 @@ class CashClosingWindow(QWidget):
         table.setObjectName("cost_detail")
         table.setHorizontalHeaderLabels((
             "Código", "Producto", "Cantidad vendida",
-            "Costo unitario en venta", "Costo total",
+            "Costo unitario en venta", "Costo de mercancía vendida",
         ))
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.horizontalHeader().setSectionResizeMode(
