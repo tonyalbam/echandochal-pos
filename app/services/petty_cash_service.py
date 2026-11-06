@@ -10,7 +10,7 @@ from app.services.payment_allocation import cents
 
 
 class PettyCashService:
-    EXPENSE_TYPES = ("Gastos Fijos", "Gastos variables")
+    EXPENSE_TYPES = ("Gastos Fijos", "Gastos variables", "Sobre/Valores")
 
     def __init__(self, database):
         self.database = database
@@ -127,7 +127,7 @@ class PettyCashService:
     def add_expense(self, day, kind, description, amount):
         day = self._date(day)
         if kind not in self.EXPENSE_TYPES:
-            raise ValueError("Selecciona Gastos Fijos o Gastos variables.")
+            raise ValueError("Selecciona Gastos Fijos, Gastos variables o Sobre/Valores.")
         description = description.strip()
         if not description or len(description) > 250:
             raise ValueError("La descripción debe tener de 1 a 250 caracteres.")
