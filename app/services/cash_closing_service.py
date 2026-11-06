@@ -175,6 +175,7 @@ class CashClosingService:
             "morralla": loose_change,
             "saldo_inicial": summary["saldo_inicial_centavos"] / 100,
             "ventas_efectivo": summary["ventas_efectivo_centavos"] / 100,
+            "compras_efectivo": summary["compras_efectivo_centavos"] / 100,
             "gastos_efectivo": summary["gastos_centavos"] / 100,
             "efectivo_esperado": round(expected, 2),
             "efectivo_contado": round(total_counted, 2),
@@ -300,6 +301,8 @@ class CashClosingService:
             ("Saldo inicial", summary["saldo_inicial_centavos"] / 100),
             ("Ventas en efectivo (cambio descontado)",
              summary["ventas_efectivo_centavos"] / 100),
+            ("Compras en efectivo",
+             summary["compras_efectivo_centavos"] / 100),
             ("Gastos operativos", summary["gastos_centavos"] / 100),
             ("Saldo esperado", summary["saldo_esperado_centavos"] / 100),
         ), start=1):
@@ -314,6 +317,24 @@ class CashClosingService:
             sheet.cell(index, 1, expense["tipo"])
             sheet.cell(index, 2, expense["descripcion"])
             sheet.cell(index, 3, expense["monto_centavos"] / 100).number_format = money
+
+        flows_sheet = workbook.create_sheet("Flujos por medio")
+        flows_sheet.append([
+            "Medio de pago", "Entradas de ventas netas",
+            "Compras pagadas", "Flujo neto"
+        ])
+        flow_service = PettyCashService(self.database)
+        for flow in flow_service.get_payment_flows(closing_date):
+            flows_sheet.append([
+                flow["metodo_pago"], flow["entradas_centavos"] / 100,
+                flow["compras_centavos"] / 100,
+                flow["flujo_neto_centavos"] / 100,
+            ])
+        for col in (2, 3, 4):
+            for row in range(2, 5):
+                flows_sheet.cell(row, col).number_format = money
+        for col, width in enumerate((22, 25, 22, 20), start=1):
+            flows_sheet.column_dimensions[get_column_letter(col)].width = width
 
         widths = (28, 18, 18, 18, 18)
         for column, width in enumerate(widths, start=1):
@@ -439,6 +460,8 @@ class CashClosingService:
             ["Saldo inicial", f"$ {summary['saldo_inicial_centavos'] / 100:,.2f}"],
             ["Ventas en efectivo (cambio descontado)",
              f"$ {summary['ventas_efectivo_centavos'] / 100:,.2f}"],
+            ["Compras en efectivo",
+             f"$ {summary['compras_efectivo_centavos'] / 100:,.2f}"],
             ["Gastos operativos", f"$ {summary['gastos_centavos'] / 100:,.2f}"],
             ["Saldo esperado", f"$ {summary['saldo_esperado_centavos'] / 100:,.2f}"],
         ]
@@ -469,6 +492,34 @@ class CashClosingService:
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
             ]))
             story.append(expense_table)
+
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(
+            "<b>Flujos de dinero por medio de pago</b>", styles["Heading2"]
+        ))
+        flows = PettyCashService(self.database).get_payment_flows(closing_date)
+        flow_data = [["Medio", "Ventas netas", "Compras", "Flujo neto"]]
+        for flow in flows:
+            flow_data.append([
+                flow["metodo_pago"],
+                f"$ {flow['entradas_centavos'] / 100:,.2f}",
+                f"$ {flow['compras_centavos'] / 100:,.2f}",
+                f"$ {flow['flujo_neto_centavos'] / 100:,.2f}",
+            ])
+        flow_table = Table(flow_data, colWidths=[
+            30 * mm, 40 * mm, 40 * mm, 40 * mm
+        ], repeatRows=1)
+        flow_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E78")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+        ]))
+        story.append(flow_table)
+        story.append(Paragraph(
+            "Los flujos son movimientos del día, no saldos bancarios.",
+            styles["Normal"],
+        ))
 
         document = SimpleDocTemplate(
             str(output_path), pagesize=letter,
