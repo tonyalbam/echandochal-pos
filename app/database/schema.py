@@ -193,6 +193,24 @@ def create_database(db: Database) -> None:
         """
     )
 
+    # Cada compra puede desembolsarse con uno o varios medios de pago.
+    # Los movimientos antiguos quedan sin desglose hasta que se capture.
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS pagos_compra (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            compra_id INTEGER NOT NULL,
+            metodo_pago TEXT NOT NULL CHECK (
+                metodo_pago IN ('Efectivo', 'Tarjeta', 'Transferencia')
+            ),
+            monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
+            creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (compra_id) REFERENCES compras(id) ON DELETE RESTRICT,
+            UNIQUE (compra_id, metodo_pago)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pagos_compra_compra
+            ON pagos_compra(compra_id);
+    """)
+
     # Caja chica: efectivo arrastrado y retiros diarios auditables.
     # Las tablas nuevas no alteran ni migran registros históricos de ventas.
     cursor.executescript("""
