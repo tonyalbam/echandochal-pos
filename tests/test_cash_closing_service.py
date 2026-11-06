@@ -151,7 +151,7 @@ class CashClosingServiceTest(unittest.TestCase):
             self.assertIn("Corte diario - 2026-08-30", text)
             self.assertIn("TOTAL VENTAS", text)
             self.assertIn("$600.00", text)
-            self.assertIn("Utilidad del día", text)
+            self.assertIn("Utilidad operativa del día", text)
             self.assertIn("Arqueo manual de efectivo", text)
             self.assertIn("Morralla", text)
 
