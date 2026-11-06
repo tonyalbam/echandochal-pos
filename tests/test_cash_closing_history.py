@@ -2,6 +2,8 @@
 import os
 import sqlite3
 import unittest
+from unittest.mock import patch
+from zoneinfo import ZoneInfoNotFoundError
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -165,6 +167,25 @@ class CashClosingHistoryUiTest(unittest.TestCase):
             local_timestamp("2026-11-05 18:45:00"),
             "2026-11-05 12:45:00",
         )
+
+    def test_missing_windows_tzdata_does_not_break_cash_history(self):
+        # En Windows, zoneinfo no encuentra IANA si el usuario no actualizó
+        # las dependencias de su entorno virtual.
+        with patch(
+            "app.ui.cash_closing_history_window.ZoneInfo",
+            side_effect=ZoneInfoNotFoundError("America/Mexico_City"),
+        ):
+            self.assertEqual(
+                local_timestamp("2026-11-06 03:23:27"),
+                "2026-11-05 21:23:27",
+            )
+            self.assertEqual(
+                local_timestamp("2022-08-06 03:23:27"),
+                "2022-08-06 03:23:27 UTC",
+            )
+            self.window.refresh()
+            self.assertIn("CONFIRMADO", self.window.confirmation.text())
+            self.assertEqual(self.window.expenses.rowCount(), 1)
 
     def test_cancelled_expense_label_and_local_dates_do_not_change_db(self):
         cursor = self.db.cursor()
