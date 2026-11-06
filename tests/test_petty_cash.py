@@ -267,6 +267,59 @@ class PettyCashTest(unittest.TestCase):
             12000
         )
 
+    def test_sobre_valores_is_valid_and_deducted_from_cash(self):
+        self.add_sale("2026-10-01", 100, 100)
+        expense_id = self.service.add_expense(
+            "2026-10-01", "Sobre/Valores", "Sobre de depósito", 30.50
+        )
+        summary = self.service.get_summary("2026-10-01")
+        self.assertEqual(summary["gastos_centavos"], 3050)
+        self.assertEqual(summary["saldo_esperado_centavos"], 6950)
+        self.assertEqual(summary["gastos"][0]["tipo"], "Sobre/Valores")
+        self.service.delete_expense("2026-10-01", expense_id)
+        self.assertEqual(
+            self.service.get_summary("2026-10-01")["gastos_centavos"], 0
+        )
+
+    def test_schema_migrates_existing_expenses_without_losing_history(self):
+        cursor = self.db.cursor()
+        cursor.execute("DROP TABLE gastos_caja")
+        cursor.execute("""
+            CREATE TABLE gastos_caja (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT NOT NULL,
+                tipo TEXT NOT NULL CHECK (
+                    tipo IN ('Gastos Fijos', 'Gastos variables')
+                ),
+                descripcion TEXT NOT NULL CHECK (LENGTH(TRIM(descripcion)) > 0),
+                monto_centavos INTEGER NOT NULL CHECK (monto_centavos > 0),
+                creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                anulado INTEGER NOT NULL DEFAULT 0 CHECK(anulado IN (0, 1)),
+                anulado_en TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO gastos_caja
+                (id, fecha, tipo, descripcion, monto_centavos, anulado)
+            VALUES (15, '2026-10-01', 'Gastos variables', 'Papelería', 500, 1)
+        """)
+        self.db.commit()
+        create_database(self.db)
+        saved = self.db.cursor().execute(
+            "SELECT id, tipo, descripcion, monto_centavos, anulado "
+            "FROM gastos_caja WHERE id = 15"
+        ).fetchone()
+        self.assertEqual(tuple(saved), (15, "Gastos variables", "Papelería", 500, 1))
+        expense_id = self.service.add_expense(
+            "2026-10-01", "Sobre/Valores", "Sobre resguardado", 2
+        )
+        self.assertGreater(expense_id, 15)
+        create_database(self.db)
+        self.assertEqual(
+            self.db.cursor().execute("PRAGMA integrity_check").fetchone()[0],
+            "ok"
+        )
+
     def test_schema_migration_is_idempotent(self):
         create_database(self.db)
         self.add_sale("2026-10-01", 100, 100)
