@@ -7,14 +7,15 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QMessageBox, QTableWidget
+from PySide6.QtWidgets import QApplication, QMessageBox, QTableWidget, QGroupBox
+from PySide6.QtCore import QEvent
 
 from app.database.schema import create_database
 from app.services.petty_cash_service import PettyCashService
 from app.ui.cash_closing_window import CashClosingWindow
 
 
-class TestDatabase:
+class MemoryDatabase:
     def __init__(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
@@ -36,7 +37,7 @@ class GeneralTabsUiTest(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.db = TestDatabase()
+        self.db = MemoryDatabase()
         create_database(self.db)
         self.window = CashClosingWindow(self.db)
         self.window.show()
@@ -85,9 +86,21 @@ class GeneralTabsUiTest(unittest.TestCase):
         self.assertNotIn(
             "Cómo se calcula la utilidad del día",
             [group.title() for group in self.window.findChildren(
-                __import__("PySide6.QtWidgets", fromlist=["QGroupBox"]).QGroupBox
+                QGroupBox
             )],
         )
+
+    def test_hover_over_title_or_amount_opens_profit_popup(self):
+        for target in self.window._profit_hover_targets:
+            self.window._profit_popup.hide()
+            self.window.eventFilter(target, QEvent(QEvent.Type.Enter))
+            self.app.processEvents()
+            self.assertTrue(self.window._profit_popup.isVisible())
+            self.assertEqual(
+                self.window.profit_cost_table.horizontalHeaderItem(4).text(),
+                "Costo de mercancía vendida",
+            )
+        self.window._profit_popup.hide()
 
     def test_concepts_show_accurate_daily_and_accumulated_values(self):
         self.assertEqual(self.window.concepts_table.item(0, 0).text(),
