@@ -550,6 +550,7 @@ class PurchaseService:
         purchases_sheet = workbook.active
         purchases_sheet.title = "Compras"
         items_sheet = workbook.create_sheet("Productos comprados")
+        payments_sheet = workbook.create_sheet("Pagos de compras")
 
         title_fill = PatternFill("solid", fgColor="1F4E78")
         header_fill = PatternFill("solid", fgColor="D9EAF7")
@@ -561,7 +562,7 @@ class PurchaseService:
         if date_from or date_to:
             period = f"{date_from or 'Inicio'} a {date_to or 'Hoy'}"
 
-        purchases_sheet.merge_cells("A1:G1")
+        purchases_sheet.merge_cells("A1:H1")
         business_name = ConfigurationService(
             self.database
         ).get_business_name()
@@ -576,7 +577,7 @@ class PurchaseService:
 
         headers = (
             "Folio", "Fecha", "Proveedor", "Subtotal", "Total",
-            "Productos", "Notas",
+            "Productos", "Notas", "Medios de pago",
         )
         for column, header in enumerate(headers, start=1):
             cell = purchases_sheet.cell(row=5, column=column, value=header)
@@ -594,14 +595,22 @@ class PurchaseService:
             cell.font = white_bold_font
             cell.alignment = Alignment(horizontal="center")
 
+        payment_headers = (
+            "Folio", "Fecha", "Proveedor", "Forma de pago", "Monto"
+        )
+        for column, header in enumerate(payment_headers, start=1):
+            cell = payments_sheet.cell(row=1, column=column, value=header)
+            cell.fill = title_fill
+            cell.font = white_bold_font
         item_row = 2
+        payment_row = 2
         for purchase_row, purchase in enumerate(purchases, start=6):
             detail = self.get_purchase(int(purchase["id"]))
             items = detail["items"] if detail else []
             values = (
                 purchase["folio"], purchase["fecha"], purchase["proveedor"],
                 purchase["subtotal"], purchase["total"], len(items),
-                purchase["notas"] or "",
+                purchase["notas"] or "", purchase["formas_pago"],
             )
             for column, value in enumerate(values, start=1):
                 cell = purchases_sheet.cell(
@@ -609,6 +618,18 @@ class PurchaseService:
                 )
                 if column in (4, 5):
                     cell.number_format = money_format
+
+            for payment in (detail["pagos"] if detail else []):
+                payment_values = (
+                    purchase["folio"], purchase["fecha"],
+                    purchase["proveedor"], payment["metodo_pago"],
+                    payment["monto"],
+                )
+                for column, value in enumerate(payment_values, start=1):
+                    cell = payments_sheet.cell(payment_row, column, value)
+                    if column == 5:
+                        cell.number_format = money_format
+                payment_row += 1
 
             for item in items:
                 item_values = (
@@ -641,12 +662,18 @@ class PurchaseService:
 
         purchases_sheet.freeze_panes = "A6"
         if purchases:
-            purchases_sheet.auto_filter.ref = f"A5:G{len(purchases) + 5}"
+            purchases_sheet.auto_filter.ref = f"A5:H{len(purchases) + 5}"
         items_sheet.freeze_panes = "A2"
         if item_row > 2:
             items_sheet.auto_filter.ref = f"A1:H{item_row - 1}"
 
-        purchase_widths = (22, 13, 28, 15, 15, 12, 40)
+        if payment_row > 2:
+            payments_sheet.auto_filter.ref = f"A1:E{payment_row - 1}"
+        payments_sheet.freeze_panes = "A2"
+        for col, width in enumerate((22, 13, 28, 22, 16), start=1):
+            payments_sheet.column_dimensions[get_column_letter(col)].width = width
+
+        purchase_widths = (22, 13, 28, 15, 15, 12, 40, 35)
         item_widths = (22, 13, 28, 16, 34, 12, 16, 15)
         for column, width in enumerate(purchase_widths, start=1):
             purchases_sheet.column_dimensions[get_column_letter(column)].width = width
