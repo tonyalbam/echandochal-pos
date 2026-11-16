@@ -39,8 +39,9 @@ def calculate_payment(total: object, allocations: dict[str, object],
     received = cents(cash_received)
     if received < amounts["Efectivo"]:
         raise ValueError("El efectivo recibido es insuficiente.")
-    if not amounts["Efectivo"] and received:
-        raise ValueError("No se puede recibir efectivo en una venta sin pago en efectivo.")
+    # Puede haberse entregado efectivo aunque los medios electrónicos ya
+    # cubran la venta. En ese caso se devuelve íntegro como cambio; jamás se
+    # contabiliza como entrada en efectivo.
     change = received - amounts["Efectivo"]
     rate = Decimal(str(commission_percentage))
     if not rate.is_finite() or rate < 0 or rate > 100:
@@ -59,3 +60,41 @@ def calculate_payment(total: object, allocations: dict[str, object],
         "commission": commission_cents / 100,
         "net_total": (total_cents - commission_cents) / 100,
     }
+
+
+def calculate_payment_from_received(
+    total: object,
+    transfer: object = 0,
+    card: object = 0,
+    cash_received: object = 0,
+    commission_percentage: object = 0,
+) -> dict:
+    """Calcula automáticamente lo que corresponde pagar en efectivo.
+
+    El cajero solo captura lo recibido y los importes electrónicos. El
+    efectivo aplicado a la venta nunca incluye el cambio devuelto.
+    """
+    total_cents = cents(total)
+    transfer_cents = cents(transfer)
+    card_cents = cents(card)
+    received_cents = cents(cash_received)
+    other_cents = transfer_cents + card_cents
+    if other_cents > total_cents:
+        raise ValueError(
+            "La suma de transferencia y tarjeta excede el total de la venta."
+        )
+    cash_due = total_cents - other_cents
+    if received_cents < cash_due:
+        raise ValueError(
+            "El efectivo recibido es insuficiente para completar el cobro."
+        )
+    return calculate_payment(
+        total,
+        {
+            "Efectivo": cash_due / 100,
+            "Transferencia": transfer_cents / 100,
+            "Mercado Libre": card_cents / 100,
+        },
+        cash_received=received_cents / 100,
+        commission_percentage=commission_percentage,
+    )
