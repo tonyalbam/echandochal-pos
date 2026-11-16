@@ -91,12 +91,12 @@ class PaymentAmountInput(QLineEdit):
 
 
 class SalePaymentDialog(QDialog):
-    """Captura los pagos de toda la venta y calcula el cambio."""
+    """Cobro simple: captura electrónica y efectivo recibido, con cambio automático."""
 
     def __init__(self, total: float, commission_rate: float, parent=None):
         super().__init__(parent)
-        from app.services.payment_allocation import calculate_payment
-        self.calculate_payment = calculate_payment
+        from app.services.payment_allocation import calculate_payment_from_received
+        self.calculate_payment = calculate_payment_from_received
         self.total = round(total, 2)
         self.commission_rate = commission_rate
         self.result = None
@@ -107,19 +107,20 @@ class SalePaymentDialog(QDialog):
         title.setStyleSheet("font-size: 22px; font-weight: bold;")
         layout.addWidget(title)
         help_text = QLabel(
-            "Distribuye el total entre efectivo, transferencia y tarjeta. "
-            "El efectivo recibido puede ser mayor que el importe en efectivo."
+            "Indica lo pagado por transferencia o tarjeta y el efectivo "
+            "que entrega el cliente. El sistema calcula el cambio automáticamente."
         )
         help_text.setWordWrap(True)
         layout.addWidget(help_text)
+
         self.amounts = {}
-        # Una sola cuadrícula para mantener idéntico ancho y alineación
-        # de todas las entradas, incluso con etiquetas de distinta longitud.
         amounts_grid = QGridLayout()
         amounts_grid.setHorizontalSpacing(14)
         amounts_grid.setVerticalSpacing(10)
         amounts_grid.setColumnStretch(1, 1)
-        for row_index, name in enumerate(SaleService.PAYMENT_METHODS):
+        # El efectivo aplicado ya no es un campo: se calcula a partir del
+        # total menos los importes de transferencia y Mercado Libre.
+        for row_index, name in enumerate(("Transferencia", "Mercado Libre")):
             display_name = (
                 "Tarjeta (Mercado Libre)" if name == "Mercado Libre" else name
             )
@@ -129,19 +130,25 @@ class SalePaymentDialog(QDialog):
             field.textChanged.connect(self._update)
             amounts_grid.addWidget(field, row_index, 1)
             self.amounts[name] = field
+
         self.cash_received = PaymentAmountInput(self)
         self.cash_received.setAccessibleName("Efectivo recibido")
         self.cash_received.textChanged.connect(self._update)
-        received_row = len(SaleService.PAYMENT_METHODS)
-        amounts_grid.addWidget(QLabel("Efectivo recibido"), received_row, 0)
-        amounts_grid.addWidget(self.cash_received, received_row, 1)
+        amounts_grid.addWidget(QLabel("Efectivo recibido"), 2, 0)
+        amounts_grid.addWidget(self.cash_received, 2, 1)
         layout.addLayout(amounts_grid)
+
+        self.cash_applied_label = QLabel()
         self.remaining_label = QLabel()
         self.change_label = QLabel()
-        self.change_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        self.change_label.setStyleSheet("font-size: 20px; font-weight: bold;")
         self.commission_label = QLabel()
-        for widget in (self.remaining_label, self.change_label, self.commission_label):
+        for widget in (
+            self.cash_applied_label, self.remaining_label,
+            self.change_label, self.commission_label,
+        ):
             layout.addWidget(widget)
+
         controls = QHBoxLayout()
         cancel = QPushButton("Cancelar")
         cancel.clicked.connect(self.reject)
@@ -154,28 +161,49 @@ class SalePaymentDialog(QDialog):
 
     def _update(self):
         from app.services.payment_allocation import cents
-        amount_cents = sum(cents(field.amount()) for field in self.amounts.values())
-        remaining = cents(self.total) - amount_cents
-        received = cents(self.cash_received.amount())
-        cash = cents(self.amounts["Efectivo"].amount())
-        self.remaining_label.setText(
-            f"{'Falta cobrar' if remaining >= 0 else 'Excede el total'}: "
-            f"$ {abs(remaining) / 100:,.2f}"
-        )
-        self.change_label.setText(f"Cambio: $ {max(0, received - cash) / 100:,.2f}")
-        card = self.amounts["Mercado Libre"].amount()
+        total_cents = cents(self.total)
+        transfer_cents = cents(self.amounts["Transferencia"].amount())
+        card_cents = cents(self.amounts["Mercado Libre"].amount())
+        received_cents = cents(self.cash_received.amount())
+        electronic_cents = transfer_cents + card_cents
+        if electronic_cents > total_cents:
+            extra = electronic_cents - total_cents
+            self.cash_applied_label.setText("Efectivo aplicado a la venta: $ 0.00")
+            self.remaining_label.setText(
+                f"Transferencia y tarjeta exceden el total: $ {extra / 100:,.2f}"
+            )
+            self.change_label.setText("Cambio a devolver: $ 0.00")
+            balanced = False
+        else:
+            required_cash = total_cents - electronic_cents
+            missing = max(0, required_cash - received_cents)
+            change = max(0, received_cents - required_cash)
+            self.cash_applied_label.setText(
+                f"Efectivo aplicado a la venta: $ {required_cash / 100:,.2f}"
+            )
+            self.remaining_label.setText(
+                f"Falta cobrar: $ {missing / 100:,.2f}"
+            )
+            self.change_label.setText(
+                f"Cambio a devolver: $ {change / 100:,.2f}"
+            )
+            balanced = missing == 0
+
+        card_amount = self.amounts["Mercado Libre"].amount()
         self.commission_label.setText(
             f"Comisión estimada de tarjeta ({self.commission_rate:g}%): "
-            f"$ {round(card * self.commission_rate / 100, 2):,.2f}"
+            f"$ {round(card_amount * self.commission_rate / 100, 2):,.2f}"
         )
-        self.confirm.setEnabled(remaining == 0 and received >= cash)
+        self.confirm.setEnabled(balanced)
 
     def _accept(self):
-        payments = {name: field.amount() for name, field in self.amounts.items()}
         try:
             self.result = self.calculate_payment(
-                self.total, payments, self.cash_received.amount(),
-                self.commission_rate,
+                total=self.total,
+                transfer=self.amounts["Transferencia"].amount(),
+                card=self.amounts["Mercado Libre"].amount(),
+                cash_received=self.cash_received.amount(),
+                commission_percentage=self.commission_rate,
             )
         except ValueError as exc:
             QMessageBox.warning(self, "Cobro inválido", str(exc))
