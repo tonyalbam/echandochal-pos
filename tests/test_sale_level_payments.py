@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from app.database.schema import create_database
 from app.services.sale_service import SaleService
+from app.services.payment_allocation import calculate_payment_from_received
+from app.services.petty_cash_service import PettyCashService
 from app.services.sale_history_service import SaleHistoryService
 from app.services.dashboard_service import DashboardService
 from app.services.cash_closing_service import CashClosingService
@@ -94,6 +96,54 @@ class SaleLevelPaymentTest(unittest.TestCase):
             )
             self.assertEqual(payments_sheet["E4"].value, 8)
             workbook.close()
+
+    def test_automatic_cash_payment_records_only_net_cash_not_tendered(self):
+        checkout = calculate_payment_from_received(
+            total=350, transfer=100, card=200, cash_received=100,
+            commission_percentage=4,
+        )
+        with patch("app.services.sale_service.datetime", FakeDateTime):
+            sale = SaleService(self.db).create_sale(
+                [{"producto_id": 1, "cantidad": 1, "precio_unitario": 350}],
+                payments=checkout["payments"],
+                cash_received=checkout["cash_received"],
+            )
+        self.assertEqual(sale["change"], 50)
+        self.assertEqual(sale["payments"]["Efectivo"], 50)
+        self.assertEqual(sale["payments"]["Transferencia"], 100)
+        self.assertEqual(sale["payments"]["Mercado Libre"], 200)
+        self.assertEqual(sale["monto_comision"], 8)
+        self.assertEqual(
+            PettyCashService(self.db).get_summary("2026-11-02")[
+                "ventas_efectivo_centavos"
+            ], 5000
+        )
+        closing = CashClosingService(self.db).get_daily_closing("2026-11-02")
+        self.assertEqual(closing["formas_pago"][0]["ventas"], 50)
+        self.assertEqual(closing["formas_pago"][1]["ventas"], 100)
+        self.assertEqual(closing["formas_pago"][2]["ventas"], 200)
+
+    def test_cash_only_excess_is_not_counted_in_register_or_reports(self):
+        checkout = calculate_payment_from_received(
+            350, cash_received=500, commission_percentage=4,
+        )
+        with patch("app.services.sale_service.datetime", FakeDateTime):
+            sale = SaleService(self.db).create_sale(
+                [{"producto_id": 1, "cantidad": 1, "precio_unitario": 350}],
+                payments=checkout["payments"],
+                cash_received=checkout["cash_received"],
+            )
+        self.assertEqual(sale["change"], 150)
+        self.assertEqual(sale["total_neto"], 350)
+        self.assertEqual(
+            PettyCashService(self.db).get_summary("2026-11-02")[
+                "ventas_efectivo_centavos"
+            ], 35000,
+        )
+        self.assertEqual(
+            SaleHistoryService(self.db).get_sale(sale["id"])["payments"][0]["monto"],
+            350,
+        )
 
     def test_invalid_payment_does_not_create_sale(self):
         with self.assertRaises(ValueError):
