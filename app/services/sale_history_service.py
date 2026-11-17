@@ -459,7 +459,8 @@ class SaleHistoryService:
                     dv.producto_id,
                     dv.cantidad,
                     p.nombre,
-                    p.existencia
+                    p.existencia,
+                    p.tipo
                 FROM detalle_venta dv
                 INNER JOIN productos p
                     ON p.id = dv.producto_id
@@ -476,7 +477,13 @@ class SaleHistoryService:
                     "La venta no tiene productos asociados."
                 )
 
+            returned_count = 0
             for detalle in detalles:
+                if detalle["tipo"] == "SERVICIO":
+                    # Una clase cancelada no repone mercancía y tampoco
+                    # puede revivir existencias ficticias anteriores.
+                    continue
+                returned_count += 1
                 producto_id = detalle["producto_id"]
                 cantidad = float(detalle["cantidad"])
 
@@ -552,7 +559,7 @@ class SaleHistoryService:
                     "CANCELAR",
                     "VENTAS",
                     folio,
-                    "Venta cancelada y mercancía devuelta al inventario.",
+                    "Venta cancelada; solo mercancía física devuelta al inventario.",
                 ),
             )
 
@@ -561,7 +568,7 @@ class SaleHistoryService:
             return {
                 "id": sale_id,
                 "folio": folio,
-                "productos_devueltos": len(detalles),
+                "productos_devueltos": returned_count,
             }
 
         except Exception:

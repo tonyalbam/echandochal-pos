@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from app.database.schema import create_database
 from app.services.product_service import ProductService
 from app.services.sale_service import SaleService
+from app.services.sale_history_service import SaleHistoryService
 from app.services.purchase_service import PurchaseService
 from app.services.quick_stock_service import QuickStockService
 from app.services.dashboard_service import DashboardService
@@ -231,6 +232,24 @@ class ServiceCatalogAndSaleTest(unittest.TestCase):
             self.assertEqual(window.items[0]["cantidad"], 300)
         finally:
             window.close()
+
+    def test_cancel_mixed_sale_restores_only_physical_items(self):
+        sale = SaleService(self.db).create_sale(
+            [{"producto_id": self.product_id, "cantidad": 1,
+              "precio_unitario": 80},
+             {"producto_id": self.service_id, "cantidad": 2,
+              "precio_unitario": 200}],
+            payment_method="Efectivo",
+        )
+        result = SaleHistoryService(self.db).cancel_sale(sale["id"])
+        self.assertEqual(result["productos_devueltos"], 1)
+        self.assertEqual(self.catalog.get_product(self.product_id)["existencia"], 4)
+        self.assertEqual(self.catalog.get_product(self.service_id)["existencia"], 0)
+        service_movements = self.db.cursor().execute(
+            "SELECT COUNT(*) FROM movimientos_inventario WHERE producto_id=?",
+            (self.service_id,),
+        ).fetchone()[0]
+        self.assertEqual(service_movements, 0)
 
     def test_service_type_stays_after_schema_second_start(self):
         create_database(self.db)
