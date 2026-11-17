@@ -185,6 +185,9 @@ class PurchaseWindow(QWidget):
         self.product_search.setPlaceholderText(
             "Código, código de barras, nombre o marca..."
         )
+        self.product_search.setToolTip(
+            "Sugerencias: código | producto | marca | categoría | color | unidad"
+        )
 
         self.product_search.returnPressed.connect(
             self._add_product
@@ -466,12 +469,40 @@ class PurchaseWindow(QWidget):
         self.suggestion_products = {}
         labels = []
         for product in products:
-            brand = f" | {product['marca']}" if product["marca"] else ""
-            label = f"{product['codigo']} | {product['nombre']}{brand}"
+            # El código primero permite identificar cada producto aunque
+            # existan otros con el mismo nombre y diferentes variantes.
+            label = " | ".join((
+                product["codigo"],
+                product["nombre"],
+                product.get("marca") or "Sin marca",
+                product.get("categoria") or "Sin categoría",
+                product.get("color") or "Sin color",
+                product.get("unidad") or "Sin unidad",
+            ))
             labels.append(label)
             self.suggestion_products[label] = product
         self.suggestion_model.setStringList(labels)
         if labels:
+            popup = self.completer.popup()
+            popup.setTextElideMode(Qt.TextElideMode.ElideNone)
+            popup.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+            screen = self.product_search.screen()
+            screen_width = (
+                screen.availableGeometry().width() if screen
+                else self.width()
+            )
+            widest_label = max(
+                popup.fontMetrics().horizontalAdvance(label)
+                for label in labels
+            )
+            popup.setMinimumWidth(
+                max(
+                    self.product_search.width(),
+                    min(widest_label + 45, max(320, screen_width - 80)),
+                )
+            )
             self.completer.complete()
 
     def _add_suggestion(self, label: str) -> None:
