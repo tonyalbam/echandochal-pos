@@ -43,3 +43,6 @@ tickets/*
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# Se reconstruye desde el PNG durante la compilación de Windows
+app/assets/echandochal_icon.ico

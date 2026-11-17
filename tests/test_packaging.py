@@ -120,13 +120,13 @@ class PackagingTest(unittest.TestCase):
         self.assertNotIn("[InstallDelete]", installer)
         self.assertIn("AppId={{73C9AB99-2794-4384-BCA5-D2EEB61E63EF}", installer)
 
-    def test_1_1_release_build_includes_installer_and_instructions(self) -> None:
+    def test_1_2_release_build_includes_installer_and_instructions(self) -> None:
         workflow = Path(".github/workflows/build-windows.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("release/1.1.0", workflow)
-        self.assertIn("default: 1.1.0", workflow)
-        self.assertIn("EchandoChalPOS-Setup-1.1.0.exe", workflow)
+        self.assertIn("release/1.2.0", workflow)
+        self.assertIn("default: 1.2.0", workflow)
+        self.assertIn("EchandoChalPOS-Setup-1.2.0.exe", workflow)
         self.assertIn("SHA256SUMS.txt", workflow)
         self.assertIn("INSTRUCCIONES_ACTUALIZACION.md", workflow)
 

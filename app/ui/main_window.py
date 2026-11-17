@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.database.connection import Database
+from app.version import APP_VERSION
 from app.ui.products_window import ProductsWindow
 from app.ui.sale_window import SaleWindow
 from app.ui.sale_history_window import SaleHistoryWindow
@@ -137,15 +138,13 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
 
-        version = QLabel(
-            "Echando Chal POS\nv1.0.0"
-        )
+        self.version_label = QLabel(f"Echando Chal POS\nv{APP_VERSION}")
 
-        version.setAlignment(
+        self.version_label.setAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
 
-        layout.addWidget(version)
+        layout.addWidget(self.version_label)
 
         return menu
 

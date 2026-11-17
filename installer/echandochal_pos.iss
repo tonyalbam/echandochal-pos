@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.2.0"
 #endif
 
 [Setup]
@@ -35,6 +35,7 @@ OutputBaseFilename=EchandoChalPOS-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\app\assets\echandochal_icon.ico
 UninstallDisplayIcon={app}\EchandoChalPOS.exe
 CloseApplications=yes
 RestartApplications=no

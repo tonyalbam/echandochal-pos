@@ -6,10 +6,10 @@ on:
       version:
         description: Versión del candidato
         required: true
-        default: 1.1.0
+        default: 1.2.0
   push:
     branches:
-      - release/1.1.0
+      - release/1.2.0
 
 jobs:
   build:
@@ -47,22 +47,22 @@ jobs:
         run: |
           $Version = "${{ github.event.inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($Version)) {
-            $Version = "1.1.0"
+            $Version = "1.2.0"
           }
           .\build_windows.ps1 -Version $Version -RequireInstaller
 
       - name: Preparar instrucciones y huella digital
         shell: pwsh
         run: |
-          Copy-Item RELEASE_1.1.0.md release\INSTRUCCIONES_ACTUALIZACION.md
-          $Setup = Get-Item release\EchandoChalPOS-Setup-1.1.0.exe
+          Copy-Item RELEASE_1.2.0.md release\INSTRUCCIONES_ACTUALIZACION.md
+          $Setup = Get-Item release\EchandoChalPOS-Setup-1.2.0.exe
           $Hash = (Get-FileHash -Algorithm SHA256 $Setup.FullName).Hash.ToLowerInvariant()
           "$Hash  $($Setup.Name)" | Set-Content release\SHA256SUMS.txt -Encoding ascii
 
-      - name: Publicar paquete de actualización v1.1.0
+      - name: Publicar paquete de actualización v1.2.0
         uses: actions/upload-artifact@v4
         with:
-          name: EchandoChalPOS-v1.1.0-Windows
+          name: EchandoChalPOS-v1.2.0-Windows
           path: |
             release\EchandoChalPOS-Setup-*.exe
             release\EchandoChalPOS-Portable-*.zip

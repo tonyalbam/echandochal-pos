@@ -1,4 +1,7 @@
 import sys
+from pathlib import Path
+
+from PySide6.QtGui import QIcon
 
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
@@ -14,6 +17,11 @@ from app.ui.checkbox_style import AccessibleCheckboxStyle
 
 def main() -> int:
     app = QApplication(sys.argv)
+    # Ruta válida tanto para ejecución desde el repositorio como para
+    # PyInstaller (main.py se ubica en el directorio de recursos).
+    icon_file = Path(__file__).resolve().parent / "app" / "assets" / "echandochal_icon.png"
+    if icon_file.is_file():
+        app.setWindowIcon(QIcon(str(icon_file)))
     app.setStyle('Fusion')
     # El estilo de casillas se mantiene activo al alternar temas de Windows.
     checkbox_style = AccessibleCheckboxStyle(app.style())
@@ -46,7 +54,8 @@ def main() -> int:
     window = MainWindow(database)
     theme_manager.theme_changed.connect(window.apply_theme)
     window.apply_theme(theme_manager.dark_mode)
-    window.show()
+    window.setWindowIcon(app.windowIcon())
+    window.showMaximized()
 
     exit_code = app.exec()
 

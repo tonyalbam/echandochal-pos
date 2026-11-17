@@ -1,11 +1,24 @@
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "",
     [switch]$RequireInstaller
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 Set-Location $ProjectRoot
+
+# Una sola versión para la interfaz y el instalador: app/version.py.
+$VersionSource = Get-Content "app\version.py" -Raw -Encoding UTF8
+$VersionMatch = [regex]::Match(
+    $VersionSource,
+    '(?m)^APP_VERSION\s*=\s*"([^"]+)"'
+)
+if (-not $VersionMatch.Success) { throw "No se encontró APP_VERSION." }
+$SourceVersion = $VersionMatch.Groups[1].Value
+if ([string]::IsNullOrWhiteSpace($Version)) { $Version = $SourceVersion }
+if ($Version -ne $SourceVersion) {
+    throw "La versión del instalador ($Version) debe coincidir con la aplicación ($SourceVersion)."
+}
 
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
     if (Get-Command py -ErrorAction SilentlyContinue) {
@@ -30,6 +43,9 @@ foreach ($Target in @($BuildDirectory, $DistributionDirectory, $ReleaseDirectory
         Remove-Item -Recurse -Force $Target
     }
 }
+
+& .\.venv\Scripts\python.exe tools\create_app_icon.py
+if ($LASTEXITCODE -ne 0) { throw "No fue posible generar el ícono de Echando Chal." }
 
 & .\.venv\Scripts\python.exe -m PyInstaller --clean --noconfirm echandochal_pos.spec
 if ($LASTEXITCODE -ne 0) { throw "Falló PyInstaller." }

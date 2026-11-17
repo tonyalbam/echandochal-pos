@@ -31,6 +31,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="EchandoChalPOS",
+    icon="app/assets/echandochal_icon.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
