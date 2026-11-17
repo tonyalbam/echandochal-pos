@@ -655,7 +655,7 @@ class ProductDialog(QDialog):
                 )
                 QMessageBox.warning(
                     self,
-                    "Registro duplicado",
+                    "Servicio duplicado" if service else "Producto duplicado",
                     f"{description}\n\n"
                     f"Registro: {duplicate['nombre']}\n"
                     f"Código: {duplicate['codigo']}{status}\n\n"
