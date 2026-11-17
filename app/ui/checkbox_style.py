@@ -6,7 +6,7 @@ de los iconos del tema del sistema operativo.
 """
 
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import QProxyStyle, QStyle
 
 
@@ -54,8 +54,8 @@ class AccessibleCheckboxStyle(QProxyStyle):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         rect = QRectF(option.rect).adjusted(1.5, 1.5, -1.5, -1.5)
-        painter.setPen(QPen(QColor(outline), 2))
-        painter.setBrush(QColor(fill))
+        painter.setPen(QPen(QBrush(QColor(outline)), 2))
+        painter.setBrush(QBrush(QColor(fill)))
         painter.drawRoundedRect(rect, 3.5, 3.5)
 
         if checked or partial:
@@ -70,7 +70,7 @@ class AccessibleCheckboxStyle(QProxyStyle):
                 check.lineTo(x + w * 0.79, y + h * 0.29)
             painter.setPen(
                 QPen(
-                    QColor(mark),
+                    QBrush(QColor(mark)),
                     2.6,
                     Qt.PenStyle.SolidLine,
                     Qt.PenCapStyle.RoundCap,
