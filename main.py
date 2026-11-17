@@ -5,15 +5,11 @@ from PySide6.QtWidgets import QApplication
 from app.database.connection import Database
 from app.database.schema import create_database
 from app.services.backup_service import BackupService
-from app.ui.checkbox_style import AccessibleCheckboxStyle
 from app.ui.main_window import MainWindow
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    # Mantener una referencia viva al estilo global durante toda la ejecución.
-    checkbox_style = AccessibleCheckboxStyle()
-    app.setStyle(checkbox_style)
     app.setStyleSheet(
         """
         QTableView {
