@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QApplication,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -25,6 +27,7 @@ from app.database.connection import Database
 from app.services.sale_history_service import SaleHistoryService
 from app.services.ticket_service import TicketService
 from app.ui.widgets.column_sort import next_sort, sort_value
+from app.ui.theme import theme_colors
 
 
 class SortableSaleItem(QTreeWidgetItem):
@@ -549,6 +552,17 @@ class SaleHistoryWindow(QWidget):
         ]
         item = SortableSaleItem([str(value) for value in valores])
         item.setData(0, Qt.ItemDataRole.UserRole, int(sale["id"]))
+        if sale["cancelada"]:
+            # Mismo color que los productos desactivados, en TODA la fila.
+            # Los encabezados año/mes conservan su apariencia normal.
+            app = QApplication.instance()
+            dark = bool(app.property("echandochal_dark_mode")) if app else False
+            colors = theme_colors(dark)
+            background = QColor(colors["danger_row"])
+            foreground = QColor(colors["text"])
+            for column in range(len(valores)):
+                item.setBackground(column, background)
+                item.setForeground(column, foreground)
         return item
 
     def _periodo_activo(self) -> tuple[str | None, str | None]:
