@@ -427,7 +427,7 @@ class SaleWindow(QWidget):
             self._cambiar_modo_volumen
         )
         mode_help = QLabel(
-            "Desactivada: cada unidad se muestra por separado."
+            "Desactivada: escaneos separados; C o doble clic ajusta cantidad."
         )
         mode_help.setStyleSheet("color: palette(window-text);")
         mode_layout.addWidget(self.venta_voluminosa)
