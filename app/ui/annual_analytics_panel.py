@@ -58,7 +58,7 @@ class AnnualAnalyticsCard(QFrame):
             return
         # Texto completo visible, incluso para categorías o marcas largas.
         # Mantener la métrica original separada de los identificadores.
-        identity = "\\n".join((
+        identity = "\n".join((
             f"Marca: {product.get('marca') or 'Sin marca'}",
             f"Categoría: {product.get('categoria') or 'Sin categoría'}",
             f"Color: {product.get('color') or 'Sin color'}",
@@ -66,7 +66,7 @@ class AnnualAnalyticsCard(QFrame):
         ))
         self.identity.setText(identity)
         self.identity.show()
-        self.setToolTip(f"{value}\\n{identity}\\n{detail}")
+        self.setToolTip(f"{value}\n{identity}\n{detail}")
 
 
 class AnnualAnalyticsPanel(QWidget):
