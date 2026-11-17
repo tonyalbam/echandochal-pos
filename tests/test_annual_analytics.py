@@ -114,6 +114,35 @@ class AnnualAnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(result["producto_mas_rentable"]["utilidad"], 201)
         self.assertEqual(result["producto_menos_vendido"]["nombre"], "Lana sin venta")
 
+    def test_three_product_indicators_include_complete_identity(self):
+        result = self.service.get_analytics_annual(2026, date(2026, 11, 2))
+        units = result["producto_mas_vendido"]
+        profit = result["producto_mas_rentable"]
+        slowest = result["producto_menos_vendido"]
+        self.assertEqual(
+            tuple(units[key] for key in (
+                "nombre", "marca", "categoria", "color", "codigo"
+            )),
+            ("Lana azul", "Marca Uno", "Ejemplo", "Azul rey", "A"),
+        )
+        self.assertEqual(
+            tuple(profit[key] for key in (
+                "nombre", "marca", "categoria", "color", "codigo"
+            )),
+            ("Lana azul", "Marca Uno", "Ejemplo", "Azul rey", "A"),
+        )
+        self.assertEqual(
+            tuple(slowest[key] for key in (
+                "nombre", "marca", "categoria", "color", "codigo"
+            )),
+            ("Lana sin venta", "Marca Uno", "Ejemplo", "Sin color", "C"),
+        )
+        # El detalle de identificación no cambia los indicadores.
+        self.assertEqual(units["unidades"], 4)
+        self.assertAlmostEqual(profit["utilidad"], 201)
+        self.assertEqual(slowest["unidades"], 0)
+        self.assertGreaterEqual(slowest["dias"], 90)
+
     def test_revenue_donut_ignores_cancellations_and_allocates_discount(self):
         result = self.service.get_analytics_annual(2026, date(2026, 11, 2))
         leaders = result["top_productos_ingresos"]
