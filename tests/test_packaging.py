@@ -111,7 +111,7 @@ class PackagingTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            r"{localappdata}\\EchandoChalPOS\\data-location.json",
+            r"{localappdata}\EchandoChalPOS\data-location.json",
             installer,
         )
         self.assertIn("if not FileExists(ExternalConfig) then", installer)
