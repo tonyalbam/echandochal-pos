@@ -376,12 +376,32 @@ class ProductsWindow(QWidget):
         restore_table_sort(self.table)
         self._load_low_stock_products()
 
+    # Colores de fondo y texto de alto contraste para leer filas completas.
+    LOW_STOCK_BACKGROUND = "#FFF0A6"  # Amarillo
+    LOW_STOCK_FOREGROUND = "#29220D"
+    OUT_OF_STOCK_BACKGROUND = "#855331"  # Marrón
+    OUT_OF_STOCK_FOREGROUND = "#FFFFFF"
+
+    @classmethod
+    def _low_stock_row_colors(cls, product: dict) -> tuple[QColor, QColor]:
+        """Cero (o menos): agotado; de 0 al mínimo: stock bajo."""
+        if float(product["existencia"]) <= 0:
+            return (
+                QColor(cls.OUT_OF_STOCK_BACKGROUND),
+                QColor(cls.OUT_OF_STOCK_FOREGROUND),
+            )
+        return (
+            QColor(cls.LOW_STOCK_BACKGROUND),
+            QColor(cls.LOW_STOCK_FOREGROUND),
+        )
+
     def _load_low_stock_products(self) -> None:
         products = self.service.list_low_stock_products(self.search.text())
         self.low_stock_table.setRowCount(0)
 
         for row, product in enumerate(products):
             self.low_stock_table.insertRow(row)
+            background, foreground = self._low_stock_row_colors(product)
             values = [
                 product["codigo"],
                 product["nombre"],
@@ -400,6 +420,14 @@ class ProductsWindow(QWidget):
                         Qt.AlignmentFlag.AlignRight
                         | Qt.AlignmentFlag.AlignVCenter
                     )
+                # Mantener todos los campos del renglón con el mismo color,
+                # sin alterar los valores usados para ordenar o editar.
+                item.setBackground(background)
+                item.setForeground(foreground)
+                item.setToolTip(
+                    "Agotado: existencia cero" if float(product["existencia"]) <= 0
+                    else "Stock bajo: existencia al mínimo o por debajo"
+                )
                 self.low_stock_table.setItem(row, column, item)
             self.low_stock_table.item(row, 0).setData(
                 Qt.ItemDataRole.UserRole,
