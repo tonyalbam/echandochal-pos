@@ -103,6 +103,77 @@ class AnnualAnalyticsUiTest(unittest.TestCase):
         panel.pie_chart.repaint()
         panel.close()
 
+    def test_all_three_product_indicator_cards_show_full_identity(self):
+        panel = AnnualAnalyticsPanel()
+        summary = {
+            "year": 2026,
+            "marca_mas_vendida": {"nombre": "Marca Uno", "unidades": 4},
+            "producto_mas_vendido": {
+                "nombre": "Lana azul especial de nombre muy largo",
+                "marca": "Marca Uno", "categoria": "Acrílico combinado",
+                "color": "Azul rey", "codigo": "ECH0000001",
+                "unidades": 4,
+            },
+            "producto_mas_rentable": {
+                "nombre": "Estambre rentable de marca larga",
+                "marca": "Hilos Abuela", "categoria": "Algodón",
+                "color": "Naranja", "codigo": "ECH0000002",
+                "utilidad": 201,
+            },
+            "producto_menos_vendido": {
+                "nombre": "Gancho de menor rotación",
+                "marca": "Sin marca", "categoria": "Mercería",
+                "color": "Sin color", "codigo": "ECH0000003",
+                "unidades": 0, "dias": 150,
+            },
+            "utilidad_acumulada": [
+                {"mes": month, "utilidad": 0, "acumulada": 0}
+                for month in range(1, 13)
+            ],
+            "top_productos_ingresos": [],
+            "sin_venta_90_dias": [],
+        }
+        panel.set_data(summary)
+        panel.show()
+        self.app.processEvents()
+        checks = (
+            (panel.units, summary["producto_mas_vendido"], "4 unidades vendidas"),
+            (panel.profit, summary["producto_mas_rentable"], "$ 201.00"),
+            (panel.slowest, summary["producto_menos_vendido"],
+             "150 días en inventario"),
+        )
+        for card, product, metric in checks:
+            with self.subTest(card=card.title_label.text()):
+                self.assertEqual(card.value.text(), product["nombre"])
+                self.assertTrue(card.identity.isVisible())
+                self.assertTrue(card.identity.wordWrap())
+                self.assertEqual(card.identity.text().splitlines(), [
+                    f"Marca: {product['marca']}",
+                    f"Categoría: {product['categoria']}",
+                    f"Color: {product['color']}",
+                    f"Código: {product['codigo']}",
+                ])
+                self.assertIn(metric, card.subtitle.text())
+                self.assertIn(product["codigo"], card.toolTip())
+        panel.apply_theme(True)
+        panel.apply_theme(False)
+        panel.close()
+
+    def test_no_data_hides_identifiers_and_restores_them_after_refresh(self):
+        from app.ui.annual_analytics_panel import AnnualAnalyticsCard
+        card = AnnualAnalyticsCard("Producto líder por unidades", "★")
+        card.show()
+        card.update_contents("Lana azul", "3 unidades", {
+            "marca": "Marca Uno", "categoria": "Acrílico",
+            "color": "Azul", "codigo": "ECH0000004",
+        })
+        self.assertTrue(card.identity.isVisible())
+        card.update_contents("Sin ventas", "Sin datos en el año")
+        self.assertFalse(card.identity.isVisible())
+        self.assertEqual(card.identity.text(), "")
+        self.assertEqual(card.toolTip(), "")
+        card.close()
+
     def test_populated_charts_render_in_both_themes(self):
         panel = AnnualAnalyticsPanel()
         data = {
