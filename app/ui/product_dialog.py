@@ -517,6 +517,25 @@ class ProductDialog(QDialog):
             "proveedor_id": self.proveedor.currentData(),
         }
 
+        if not self.product:
+            duplicate = self.product_service.find_duplicate_product(data)
+            if duplicate is not None:
+                status = (
+                    " (desactivado)" if not duplicate["activo"] else ""
+                )
+                QMessageBox.warning(
+                    self,
+                    "Producto duplicado",
+                    "Ya existe un producto con el mismo Nombre, Categoría, "
+                    "Marca, Color y Unidad.\\n\\n"
+                    f"Producto: {duplicate['nombre']}\\n"
+                    f"Código: {duplicate['codigo']}{status}\\n\\n"
+                    "No se puede registrar nuevamente. "
+                    "Revisa los datos o utiliza el producto existente.",
+                )
+                self.color.setFocus()
+                return
+
         try:
             if self.product:
                 self.product_service.update_product(
@@ -525,6 +544,14 @@ class ProductDialog(QDialog):
                 )
             else:
                 self.product_service.create_product(data)
+
+        except ValueError as error:
+            QMessageBox.warning(
+                self,
+                "No se pudo guardar",
+                str(error),
+            )
+            return
 
         except Exception as error:
             QMessageBox.critical(

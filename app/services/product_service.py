@@ -174,6 +174,49 @@ class ProductService:
                 return self.get_product(int(row["id"]))
         return None
 
+    @staticmethod
+    def _identity_text(value: object) -> str:
+        """Compara valores de identidad sin diferencias de mayúsculas/espacios."""
+        return " ".join(str(value or "").split()).casefold()
+
+    def find_duplicate_product(self, data: dict) -> Optional[dict]:
+        """Localiza el mismo nombre, categoría, marca, color y unidad.
+
+        Se revisan los registros activos e inactivos que aún pertenecen al
+        catálogo. Los productos eliminados lógicamente no bloquean nuevas altas.
+        No se comparan precios, proveedores, códigos ni existencias.
+        """
+        category_id = data.get("categoria_id")
+        candidate = (
+            self._identity_text(data.get("nombre")),
+            self._identity_text(data.get("marca")),
+            self._identity_text(data.get("color")),
+            self._identity_text(data.get("unidad") or "pieza"),
+        )
+        if not candidate[0]:
+            return None
+
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT id, codigo, nombre, categoria_id, marca, color, unidad, activo
+            FROM productos
+            WHERE eliminado = 0 AND categoria_id IS ?
+            ORDER BY activo DESC, id DESC
+            """,
+            (category_id,),
+        )
+        for row in cursor.fetchall():
+            identity = (
+                self._identity_text(row["nombre"]),
+                self._identity_text(row["marca"]),
+                self._identity_text(row["color"]),
+                self._identity_text(row["unidad"]),
+            )
+            if identity == candidate:
+                return dict(row)
+        return None
+
     def get_next_internal_code(self) -> str:
         """Devuelve el siguiente código ECH disponible para un producto nuevo."""
 
@@ -213,6 +256,16 @@ class ProductService:
         raise ValueError("Se agotaron los códigos internos disponibles.")
 
     def create_product(self, data: dict) -> int:
+        duplicate = self.find_duplicate_product(data)
+        if duplicate is not None:
+            status = " (desactivado)" if not duplicate["activo"] else ""
+            raise ValueError(
+                "Ya existe un producto con el mismo Nombre, Categoría, "
+                "Marca, Color y Unidad. "
+                f"Código existente: {duplicate['codigo']}{status}. "
+                "No se puede registrar un producto duplicado."
+            )
+
         cursor = self.database.cursor()
         internal_code = self.get_next_internal_code()
 
