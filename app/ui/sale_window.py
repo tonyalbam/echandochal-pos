@@ -1,6 +1,7 @@
 from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt, QRegularExpression
 from PySide6.QtGui import QIntValidator, QRegularExpressionValidator
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QCompleter,
     QComboBox,
@@ -164,6 +165,26 @@ class SaleQuantityDialog(QDialog):
             self.new_quantity = None
             return
         self.accept()
+
+
+class ClearOnFocusDiscountSpinBox(QDoubleSpinBox):
+    """Descuento numérico sin flechas, listo para escribir al recibir foco."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        # El descuento anterior deja de aplicarse al empezar una nueva captura.
+        # clear() mantiene el prefijo o sufijo del modo actual, sin mostrar 0.00.
+        self.setValue(0)
+        self.clear()
+
+    def wheelEvent(self, event) -> None:
+        # Evita variar el importe por un giro accidental de la rueda del mouse.
+        event.ignore()
 
 
 class ClearOnFocusLineEdit(QLineEdit):
@@ -528,7 +549,7 @@ class SaleWindow(QWidget):
             self._cambiar_tipo_descuento
         )
 
-        self.descuento = QDoubleSpinBox()
+        self.descuento = ClearOnFocusDiscountSpinBox()
 
         self.descuento.setRange(
             0,
