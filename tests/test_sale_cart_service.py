@@ -1,6 +1,7 @@
 import unittest
 
 from app.services.sale_cart_service import (
+    adjusted_sale_quantity,
     calculate_discount,
     expand_sale_items,
     group_sale_items,
@@ -58,6 +59,40 @@ class SaleCartServiceTest(unittest.TestCase):
 
     def test_zero_inventory_is_never_available(self) -> None:
         self.assertFalse(has_available_inventory(1, 0, []))
+
+    def test_quantity_adjustment_adds_and_subtracts_without_mutation(self) -> None:
+        items = [{"producto_id": 1, "cantidad": 2}]
+        self.assertEqual(adjusted_sale_quantity(items, 0, 3, 5), 5)
+        self.assertEqual(adjusted_sale_quantity(items, 0, -1, 5), 1)
+        self.assertEqual(adjusted_sale_quantity(items, 0, -2, 5), 0)
+        self.assertEqual(items[0]["cantidad"], 2)
+
+    def test_quantity_adjustment_counts_other_rows_of_same_product(self) -> None:
+        items = [
+            {"producto_id": 1, "cantidad": 2},
+            {"producto_id": 1, "cantidad": 2},
+            {"producto_id": 2, "cantidad": 100},
+        ]
+        self.assertEqual(adjusted_sale_quantity(items, 0, 1, 5), 3)
+        with self.assertRaisesRegex(ValueError, "inventario"):
+            adjusted_sale_quantity(items, 0, 2, 5)
+
+    def test_quantity_adjustment_rejects_removing_more_than_row(self) -> None:
+        items = [{"producto_id": 1, "cantidad": 1}]
+        with self.assertRaisesRegex(ValueError, "quitar más"):
+            adjusted_sale_quantity(items, 0, -2, 10)
+
+    def test_quantity_adjustment_supports_fractional_products(self) -> None:
+        items = [{"producto_id": 1, "cantidad": 0.75}]
+        self.assertEqual(adjusted_sale_quantity(items, 0, 0.25, 1), 1)
+        self.assertEqual(adjusted_sale_quantity(items, 0, -0.25, 1), 0.5)
+
+    def test_quantity_adjustment_rejects_invalid_changes(self) -> None:
+        items = [{"producto_id": 1, "cantidad": 1}]
+        for change in (0, float("nan"), float("inf")):
+            with self.subTest(change=change):
+                with self.assertRaises(ValueError):
+                    adjusted_sale_quantity(items, 0, change, 5)
 
 
 if __name__ == "__main__":

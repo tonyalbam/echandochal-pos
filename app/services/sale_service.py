@@ -101,6 +101,20 @@ class SaleService:
         )
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_product_stock(self, product_id: int) -> float | None:
+        """Consulta la existencia actual, sin usar el valor antiguo del carrito."""
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT existencia
+            FROM productos
+            WHERE id = ? AND activo = 1 AND eliminado = 0
+            """,
+            (int(product_id),),
+        )
+        row = cursor.fetchone()
+        return float(row["existencia"]) if row else None
+
     def get_commission_rate(self) -> float:
         """Obtiene la comisión configurada para Mercado Libre."""
         cursor = self.database.cursor()
@@ -236,16 +250,19 @@ class SaleService:
                     "No es posible registrar nuevas ventas para esa fecha."
                 )
 
-            # Validamos existencia antes de modificar cualquier dato.
+            # El stock debe cubrir la SUMA de todas las filas del mismo
+            # producto, también en modo de venta no voluminosa.
+            quantities_by_product: dict[int, float] = {}
             for item in items:
                 product_id = int(item["producto_id"])
                 quantity = float(item["cantidad"])
-
                 if quantity <= 0:
-                    raise ValueError(
-                        "La cantidad debe ser mayor que cero."
-                    )
+                    raise ValueError("La cantidad debe ser mayor que cero.")
+                quantities_by_product[product_id] = (
+                    quantities_by_product.get(product_id, 0.0) + quantity
+                )
 
+            for product_id, quantity in quantities_by_product.items():
                 cursor.execute(
                     """
                     SELECT nombre, existencia

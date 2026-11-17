@@ -50,3 +50,50 @@ def has_available_inventory(
         if int(item["producto_id"]) == int(product_id)
     )
     return quantity_in_cart + 1 <= float(inventory)
+
+
+def adjusted_sale_quantity(
+    items: list[dict],
+    row: int,
+    change: float,
+    inventory: float,
+) -> float:
+    """Calcula una nueva cantidad sin rebasar el inventario del producto.
+
+    change es el ajuste (positivo para agregar, negativo para quitar).
+    Las demás líneas del mismo producto también cuentan contra el stock.
+    Retorna 0 cuando la fila debe eliminarse. No modifica items.
+    """
+    from math import isfinite
+
+    if not 0 <= row < len(items):
+        raise ValueError("Selecciona un producto de la venta.")
+
+    change = float(change)
+    inventory = float(inventory)
+    if not isfinite(change) or not isfinite(inventory) or abs(change) < 0.0000001:
+        raise ValueError("Ingresa una cantidad válida para agregar o quitar.")
+
+    current = float(items[row]["cantidad"])
+    new_quantity = round(current + change, 6)
+    if new_quantity < 0:
+        raise ValueError(
+            f"No es posible quitar más de {current:g} unidades de esta fila."
+        )
+
+    if change > 0:
+        product_id = int(items[row]["producto_id"])
+        in_cart = sum(
+            float(item["cantidad"])
+            for item in items
+            if int(item["producto_id"]) == product_id
+        )
+        if round(in_cart + change, 6) > inventory + 0.0000001:
+            free = max(0.0, round(inventory - in_cart, 6))
+            raise ValueError(
+                f"¡Ya no hay inventario suficiente! "
+                f"Disponible para agregar: {free:g}. "
+                f"Existencia total: {inventory:g}; en el carrito: {in_cart:g}."
+            )
+
+    return max(0.0, new_quantity)

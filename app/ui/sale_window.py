@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from app.database.connection import Database
 from app.services.sale_cart_service import (
+    adjusted_sale_quantity,
     calculate_discount,
     expand_sale_items,
     group_sale_items,
@@ -30,6 +31,113 @@ from app.services.sale_cart_service import (
 )
 from app.services.sale_service import SaleService
 from app.services.ticket_service import TicketService
+
+
+SALE_QUANTITY_HELP = (
+    "Para agregar o quitar unidades, selecciona el producto y presiona C, "
+    "o haz doble clic sobre su renglón. "
+    "La cantidad, el inventario disponible y el importe se recalculan."
+)
+
+
+class SaleQuantityDialog(QDialog):
+    """Permite agregar o quitar una cantidad, con vista previa del inventario."""
+
+    def __init__(
+        self, items: list[dict], row: int, stock: float, parent=None
+    ) -> None:
+        super().__init__(parent)
+        self.items = items
+        self.row = row
+        self.stock = stock
+        self.adjustment = 0.0
+        item = items[row]
+        current = float(item["cantidad"])
+        in_cart = sum(
+            float(line["cantidad"]) for line in items
+            if int(line["producto_id"]) == int(item["producto_id"])
+        )
+
+        self.setWindowTitle("Modificar cantidad de producto")
+        self.setMinimumWidth(430)
+        layout = QVBoxLayout(self)
+        title = QLabel(item["nombre"])
+        title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(QLabel(
+            f"Cantidad en este renglón: {current:g}\n"
+            f"Total de este producto en la venta: {in_cart:g}\n"
+            f"Existencia en inventario: {stock:g}"
+        ))
+
+        controls = QHBoxLayout()
+        self.operation = QComboBox()
+        self.operation.addItems(["Agregar", "Quitar"])
+        self.operation.setAccessibleName("Operación")
+        controls.addWidget(self.operation)
+        self.quantity = QDoubleSpinBox()
+        self.quantity.setAccessibleName("Cantidad a agregar o quitar")
+        self.quantity.setDecimals(3)
+        self.quantity.setRange(0.001, 999999.0)
+        self.quantity.setSingleStep(1.0)
+        self.quantity.setValue(1.0)
+        controls.addWidget(self.quantity)
+        layout.addLayout(controls)
+
+        self.preview = QLabel()
+        self.preview.setWordWrap(True)
+        layout.addWidget(self.preview)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancelar")
+        cancel.clicked.connect(self.reject)
+        self.apply_button = QPushButton("Aplicar cantidad")
+        self.apply_button.clicked.connect(self._accept_adjustment)
+        buttons.addWidget(cancel)
+        buttons.addWidget(self.apply_button)
+        layout.addLayout(buttons)
+
+        self.operation.currentIndexChanged.connect(self._update_preview)
+        self.quantity.valueChanged.connect(self._update_preview)
+        self._update_preview()
+
+    def _signed_adjustment(self) -> float:
+        value = float(self.quantity.value())
+        return value if self.operation.currentIndex() == 0 else -value
+
+    def _update_preview(self) -> None:
+        change = self._signed_adjustment()
+        try:
+            new_quantity = adjusted_sale_quantity(
+                self.items, self.row, change, self.stock
+            )
+        except ValueError as error:
+            self.preview.setText(str(error))
+            self.apply_button.setEnabled(False)
+            return
+
+        new_total = sum(
+            float(item["cantidad"]) for item in self.items
+            if int(item["producto_id"])
+            == int(self.items[self.row]["producto_id"])
+        ) + change
+        if new_quantity == 0:
+            self.preview.setText(
+                f"Se eliminará esta fila. Total del producto: {new_total:g}."
+            )
+        else:
+            self.preview.setText(
+                f"Nueva cantidad del renglón: {new_quantity:g}. "
+                f"Total del producto en la venta: {new_total:g}."
+            )
+        self.apply_button.setEnabled(True)
+
+    def _accept_adjustment(self) -> None:
+        if self.apply_button.isEnabled():
+            self.adjustment = self._signed_adjustment()
+            self.accept()
 
 
 class ClearOnFocusLineEdit(QLineEdit):
@@ -212,13 +320,24 @@ class SalePaymentDialog(QDialog):
 
 
 class SaleItemsTable(QTableWidget):
-    """Tabla del carrito con eliminación rápida mediante la tecla D."""
+    """Tabla del carrito: D elimina y C modifica la cantidad."""
 
     delete_requested = Signal()
+    quantity_requested = Signal()
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_D:
             self.delete_requested.emit()
+            return
+        if (
+            event.key() == Qt.Key.Key_C
+            and not event.modifiers() & (
+                Qt.KeyboardModifier.ControlModifier
+                | Qt.KeyboardModifier.AltModifier
+                | Qt.KeyboardModifier.MetaModifier
+            )
+        ):
+            self.quantity_requested.emit()
             return
         super().keyPressEvent(event)
 
@@ -331,6 +450,8 @@ class SaleWindow(QWidget):
                 "",
             ]
         )
+        self.tabla.horizontalHeaderItem(5).setToolTip(SALE_QUANTITY_HELP)
+        self.tabla.setMouseTracking(True)
 
         self.tabla.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
@@ -340,6 +461,12 @@ class SaleWindow(QWidget):
             QTableWidget.EditTrigger.NoEditTriggers
         )
         self.tabla.delete_requested.connect(self._quitar_fila_seleccionada)
+        self.tabla.quantity_requested.connect(
+            self._editar_cantidad_seleccionada
+        )
+        self.tabla.cellDoubleClicked.connect(
+            self._editar_cantidad_desde_celda
+        )
 
         self.tabla.verticalHeader().setVisible(False)
 
@@ -642,13 +769,9 @@ class SaleWindow(QWidget):
                 QTableWidgetItem(item["categoria"]),
             )
 
-            self.tabla.setItem(
-                row,
-                5,
-                QTableWidgetItem(
-                    f"{item['cantidad']:g}"
-                ),
-            )
+            quantity_item = QTableWidgetItem(f"{item['cantidad']:g}")
+            quantity_item.setToolTip(SALE_QUANTITY_HELP)
+            self.tabla.setItem(row, 5, quantity_item)
 
             self.tabla.setItem(
                 row,
@@ -685,6 +808,65 @@ class SaleWindow(QWidget):
             )
 
         self._actualizar_totales()
+
+    def _editar_cantidad_desde_celda(self, row: int, _column: int) -> None:
+        self.tabla.selectRow(row)
+        self._editar_cantidad(row)
+
+    def _editar_cantidad_seleccionada(self) -> None:
+        self._editar_cantidad(self.tabla.currentRow())
+
+    def _editar_cantidad(self, row: int) -> None:
+        if not 0 <= row < len(self.items):
+            QMessageBox.information(
+                self, "Selecciona un producto",
+                "Selecciona un renglón para modificar su cantidad."
+            )
+            return
+
+        stock = self.service.get_product_stock(self.items[row]["producto_id"])
+        if stock is None:
+            QMessageBox.warning(
+                self, "Producto no disponible",
+                "Este producto ya no está activo en el inventario."
+            )
+            return
+
+        dialog = SaleQuantityDialog(self.items, row, stock, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._aplicar_cambio_cantidad(row, dialog.adjustment)
+
+    def _aplicar_cambio_cantidad(self, row: int, change: float) -> bool:
+        """Aplica el ajuste sobre la fila seleccionada y actualiza totales."""
+        if not 0 <= row < len(self.items):
+            return False
+        stock = self.service.get_product_stock(self.items[row]["producto_id"])
+        if stock is None:
+            QMessageBox.warning(
+                self, "Producto no disponible",
+                "Este producto ya no está activo en el inventario."
+            )
+            return False
+        try:
+            new_quantity = adjusted_sale_quantity(
+                self.items, row, change, stock
+            )
+        except ValueError as error:
+            QMessageBox.warning(self, "Cantidad no disponible", str(error))
+            return False
+
+        if new_quantity == 0:
+            self.items.pop(row)
+        else:
+            self.items[row]["cantidad"] = new_quantity
+
+        self._refrescar_tabla()
+        if self.items:
+            self.tabla.selectRow(min(row, len(self.items) - 1))
+            self.tabla.setFocus()
+        else:
+            self.codigo_input.setFocus()
+        return True
 
     def _quitar_item(
         self,
