@@ -259,6 +259,20 @@ class ServiceCatalogAndSaleTest(unittest.TestCase):
         ).fetchone()[0]
         self.assertEqual(service_movements, 0)
 
+    def test_editing_service_keeps_profit_when_field_is_focused(self):
+        dialog = ProductDialog(self.catalog, self.catalog.get_product(self.service_id))
+        dialog.show()
+        self.app.processEvents()
+        try:
+            self.assertEqual(dialog.tipo.currentData(), "SERVICIO")
+            self.assertEqual(dialog.precio.value(), 200)
+            self.assertEqual(dialog.utilidad_servicio.value(), 150)
+            dialog.utilidad_servicio.setFocus()
+            self.app.processEvents()
+            self.assertEqual(dialog.utilidad_servicio.value(), 150)
+        finally:
+            dialog.close()
+
     def test_service_type_stays_after_schema_second_start(self):
         create_database(self.db)
         self.assertEqual(self.catalog.get_product(self.service_id)["tipo"], "SERVICIO")

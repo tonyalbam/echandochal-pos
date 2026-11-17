@@ -207,7 +207,8 @@ class ProductDialog(QDialog):
         self.utilidad_servicio.textChanged.connect(self._update_service_profit_hint)
         if product:
             for field in (
-                self.costo, self.precio, self.existencia, self.stock_minimo
+                self.costo, self.precio, self.existencia, self.stock_minimo,
+                self.utilidad_servicio
             ):
                 field.clear_on_focus = False
         else:
