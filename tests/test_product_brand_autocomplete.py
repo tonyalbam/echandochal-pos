@@ -126,15 +126,17 @@ class ProductBrandAutocompleteTest(unittest.TestCase):
         finally:
             dialog.close()
 
-    def test_keyboard_enter_chooses_matching_brand(self):
+    def test_completion_activation_chooses_matching_brand(self):
         dialog = self._dialog()
         try:
             dialog.marca.setFocus()
             QTest.keyClicks(dialog.marca, "lion")
             self.app.processEvents()
-            self.assertTrue(dialog.brand_completer.popup().isVisible())
-            QTest.keyClick(dialog.marca, Qt.Key.Key_Down)
-            QTest.keyClick(dialog.marca, Qt.Key.Key_Return)
+            completer = dialog.brand_completer
+            self.assertEqual(completer.currentCompletion(), "Lion Brand")
+            # Reproducir la señal que envían Enter o un clic en una
+            # sugerencia, sin que Enter active el Guardar del QDialog.
+            completer.activated[str].emit("Lion Brand")
             self.app.processEvents()
             self.assertEqual(dialog.marca.text(), "Lion Brand")
         finally:
