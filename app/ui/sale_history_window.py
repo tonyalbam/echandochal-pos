@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -558,8 +558,8 @@ class SaleHistoryWindow(QWidget):
             app = QApplication.instance()
             dark = bool(app.property("echandochal_dark_mode")) if app else False
             colors = theme_colors(dark)
-            background = QColor(colors["danger_row"])
-            foreground = QColor(colors["text"])
+            background = QBrush(QColor(colors["danger_row"]))
+            foreground = QBrush(QColor(colors["text"]))
             for column in range(len(valores)):
                 item.setBackground(column, background)
                 item.setForeground(column, foreground)
