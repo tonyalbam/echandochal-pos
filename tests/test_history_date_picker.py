@@ -123,7 +123,7 @@ class HistoryDateFilterTest(unittest.TestCase):
         self.assertTrue(end.isEnabled())
         self.assertEqual(len(window.sales), 2)
         window.calendario_hasta._linked_date_field = end
-        self._pick_calendar(window.calendario_hasta, QDate(2026, 11, 05))
+        self._pick_calendar(window.calendario_hasta, QDate(2026, 11, 5))
         self.assertTrue(window.filtrar_fechas.isChecked())
         self.assertEqual(len(window.sales), 2)
 
