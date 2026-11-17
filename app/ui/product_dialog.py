@@ -229,6 +229,25 @@ class ProductDialog(QDialog):
             self.name_completer.activated.connect(
                 self._fill_from_matching_name
             )
+
+            # Sugerir marcas ya registradas mientras se escribe en un alta.
+            # QLineEdit sigue siendo libre: el usuario puede crear una marca
+            # nueva, o elegir una coincidencia con flechas/Enter o mouse.
+            self.brand_completer = QCompleter(
+                self.product_service.get_registered_brands(),
+                self.marca,
+            )
+            self.brand_completer.setCaseSensitivity(
+                Qt.CaseSensitivity.CaseInsensitive
+            )
+            self.brand_completer.setFilterMode(
+                Qt.MatchFlag.MatchContains
+            )
+            self.brand_completer.setCompletionMode(
+                QCompleter.CompletionMode.PopupCompletion
+            )
+            self.brand_completer.setMaxVisibleItems(12)
+            self.marca.setCompleter(self.brand_completer)
         if not product:
             self.unidad.setCurrentText("pieza")
 

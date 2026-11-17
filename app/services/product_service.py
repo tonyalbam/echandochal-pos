@@ -41,6 +41,31 @@ class ProductService:
     def __init__(self, database: Database) -> None:
         self.database = database
 
+    def get_registered_brands(self) -> list[str]:
+        """Marcas previamente capturadas, únicas y listas para autocompletar.
+
+        Incluye productos y servicios activos o desactivados que aún están
+        en el catálogo; ignora registros eliminados y nombres vacíos.
+        No modifica ningún dato almacenado.
+        """
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT marca
+            FROM productos
+            WHERE eliminado = 0
+              AND marca IS NOT NULL
+              AND TRIM(marca) <> ''
+            ORDER BY id
+            """
+        )
+        brands: dict[str, str] = {}
+        for row in cursor.fetchall():
+            brand = " ".join(row["marca"].split())
+            if brand:
+                brands.setdefault(brand.casefold(), brand)
+        return sorted(brands.values(), key=str.casefold)
+
     def list_products(
         self,
         search: str = "",
