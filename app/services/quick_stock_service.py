@@ -20,9 +20,9 @@ class QuickStockService:
         cursor = self.database.cursor()
         cursor.execute(
             """SELECT id, codigo, codigo_barras, codigo_qr, nombre, marca,
-                      color, existencia, activo, eliminado
+                      color, existencia, tipo, activo, eliminado
                  FROM productos
-                WHERE activo = 1 AND eliminado = 0
+                WHERE activo = 1 AND eliminado = 0 AND tipo = 'PRODUCTO'
                   AND (codigo = ? OR codigo_barras = ? OR codigo_qr = ?)""",
             (code, code, code),
         )
@@ -60,13 +60,14 @@ class QuickStockService:
             if product is None:
                 cursor = self.database.cursor()
                 cursor.execute(
-                    """SELECT id, codigo, nombre, marca, color, existencia,
+                    """SELECT id, codigo, nombre, marca, color, existencia, tipo,
                               activo, eliminado
                          FROM productos WHERE id = ?""", (product_id,)
                 )
                 row = cursor.fetchone()
                 product = dict(row) if row else None
-            if product is None or not product["activo"] or product["eliminado"]:
+            if (product is None or not product["activo"] or
+                    product["eliminado"] or product["tipo"] != "PRODUCTO"):
                 raise ValueError("El producto no está disponible para recepción.")
             self.products[product_id] = product
         self.pending[product_id] = quantity
@@ -81,11 +82,12 @@ class QuickStockService:
                 if quantity <= 0 or quantity > self.MAX_QUANTITY:
                     raise ValueError("Cantidad de recepción inválida.")
                 cursor.execute(
-                    """SELECT existencia, activo, eliminado
+                    """SELECT existencia, activo, eliminado, tipo
                          FROM productos WHERE id = ?""", (product_id,)
                 )
                 row = cursor.fetchone()
-                if row is None or not row["activo"] or row["eliminado"]:
+                if (row is None or not row["activo"] or row["eliminado"]
+                        or row["tipo"] != "PRODUCTO"):
                     raise ValueError(
                         "Uno de los productos fue desactivado o eliminado. "
                         "No se guardaron los cambios."

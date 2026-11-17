@@ -162,7 +162,7 @@ class ProductsWindow(QWidget):
 
         header = QHBoxLayout()
 
-        title = QLabel("Productos")
+        title = QLabel("Productos y servicios")
         title.setStyleSheet(
             """
             font-size: 28px;
@@ -173,7 +173,7 @@ class ProductsWindow(QWidget):
         header.addWidget(title)
         header.addStretch()
 
-        self.new_button = QPushButton("＋ Nuevo producto")
+        self.new_button = QPushButton("＋ Nuevo producto / servicio")
         self.new_button.clicked.connect(self._new_product)
 
         self.export_button = QPushButton("Exportar inventario")
@@ -201,7 +201,7 @@ class ProductsWindow(QWidget):
 
         self.table = QTableWidget()
 
-        self.table.setColumnCount(13)
+        self.table.setColumnCount(14)
 
         self.table.setHorizontalHeaderLabels(
             [
@@ -218,6 +218,7 @@ class ProductsWindow(QWidget):
                 "Existencia",
                 "Stock mínimo",
                 "Estado",
+                "Tipo",
             ]
         )
 
@@ -339,9 +340,13 @@ class ProductsWindow(QWidget):
                 product["unidad"],
                 f'$ {product["costo"]:,.2f}',
                 f'$ {product["precio"]:,.2f}',
-                f'{product["existencia"]:,.3f}',
-                f'{product["stock_minimo"]:,.3f}',
+                (f'{product["existencia"]:,.3f}'
+                 if product["tipo"] == "PRODUCTO" else "No aplica"),
+                (f'{product["stock_minimo"]:,.3f}'
+                 if product["tipo"] == "PRODUCTO" else "No aplica"),
                 self._stock_status(product),
+                ("Servicio: " + (product.get("subtipo_servicio") or "Otros servicios")
+                 if product["tipo"] == "SERVICIO" else "Producto"),
             ]
 
             for column, value in enumerate(values):

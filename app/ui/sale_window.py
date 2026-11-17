@@ -83,7 +83,9 @@ class SaleQuantityDialog(QDialog):
 
         current_info = QLabel(
             f"Cantidad actual: {current}    |    "
-            f"Máximo en este renglón: {available_for_row}"
+            + ("Servicio sin límite de inventario"
+               if item.get("tipo") == "SERVICIO"
+               else f"Máximo en este renglón: {available_for_row}")
         )
         layout.addWidget(current_info)
 
@@ -743,6 +745,7 @@ class SaleWindow(QWidget):
         self.items.append(
             {
                 "producto_id": producto["id"],
+                "tipo": producto.get("tipo") or "PRODUCTO",
                 "codigo": producto["codigo"],
                 "nombre": producto["nombre"],
                 "marca": producto["marca"],
@@ -764,6 +767,8 @@ class SaleWindow(QWidget):
         self.codigo_input.setFocus()
 
     def _hay_inventario_disponible(self, producto: dict) -> bool:
+        if producto.get("tipo") == "SERVICIO":
+            return True
         return has_available_inventory(
             producto["id"], producto["existencia"], self.items
         )

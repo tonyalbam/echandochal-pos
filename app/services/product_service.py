@@ -19,6 +19,24 @@ class ProductService:
         "Algodón", "Acrílico", "Combinado", "Clases", "Mercería",
         "Pedidos personalizados", "Talleres", "Patrones",
     )
+    SERVICE_TYPES = ("Clases", "Talleres", "Costura", "Otros servicios")
+
+    @classmethod
+    def validate_kind(cls, data: dict) -> tuple[str, str | None]:
+        kind = (data.get("tipo") or "PRODUCTO").upper()
+        if kind not in ("PRODUCTO", "SERVICIO"):
+            raise ValueError("Selecciona Producto o Servicio.")
+        subtype = data.get("subtipo_servicio") if kind == "SERVICIO" else None
+        if kind == "SERVICIO" and subtype not in cls.SERVICE_TYPES:
+            raise ValueError("Selecciona un tipo de servicio válido.")
+        if kind == "SERVICIO":
+            price = float(data.get("precio", 0))
+            cost = float(data.get("costo", 0))
+            if price < 0 or cost < 0 or cost > price:
+                raise ValueError(
+                    "La utilidad debe estar entre cero y el precio del servicio."
+                )
+        return kind, subtype
 
     def __init__(self, database: Database) -> None:
         self.database = database
@@ -45,7 +63,9 @@ class ProductService:
                     p.codigo_barras,
                     p.codigo_qr,
                     p.nombre,
-                    COALESCE(c.nombre, '') AS categoria,
+                    CASE WHEN p.tipo = 'SERVICIO'
+                         THEN COALESCE(p.subtipo_servicio, 'Otros servicios')
+                         ELSE COALESCE(c.nombre, '') END AS categoria,
                     COALESCE(p.marca, '') AS marca,
                     COALESCE(p.color, '') AS color,
                     p.unidad,
@@ -53,6 +73,8 @@ class ProductService:
                     p.precio,
                     p.existencia,
                     p.stock_minimo,
+                    p.tipo,
+                    p.subtipo_servicio,
                     COALESCE(pr.nombre, '') AS proveedor,
                     p.activo
                 FROM productos p
@@ -82,7 +104,9 @@ class ProductService:
                     p.codigo_barras,
                     p.codigo_qr,
                     p.nombre,
-                    COALESCE(c.nombre, '') AS categoria,
+                    CASE WHEN p.tipo = 'SERVICIO'
+                         THEN COALESCE(p.subtipo_servicio, 'Otros servicios')
+                         ELSE COALESCE(c.nombre, '') END AS categoria,
                     COALESCE(p.marca, '') AS marca,
                     COALESCE(p.color, '') AS color,
                     p.unidad,
@@ -90,6 +114,8 @@ class ProductService:
                     p.precio,
                     p.existencia,
                     p.stock_minimo,
+                    p.tipo,
+                    p.subtipo_servicio,
                     COALESCE(pr.nombre, '') AS proveedor,
                     p.activo
                 FROM productos p
@@ -109,6 +135,8 @@ class ProductService:
         products = self.list_products(search)
         low_stock = []
         for product in products:
+            if product["tipo"] == "SERVICIO":
+                continue
             existence = float(product["existencia"])
             minimum = float(product["stock_minimo"])
             if existence <= minimum:
@@ -122,6 +150,8 @@ class ProductService:
     def product_status(product: dict) -> str:
         if not product["activo"]:
             return "DESACTIVADO"
+        if product.get("tipo") == "SERVICIO":
+            return "SERVICIO"
         if product["existencia"] <= 0:
             return "AGOTADO"
         if product["existencia"] <= product["stock_minimo"]:
@@ -186,7 +216,8 @@ class ProductService:
         catálogo. Los productos eliminados lógicamente no bloquean nuevas altas.
         No se comparan precios, proveedores, códigos ni existencias.
         """
-        category_id = data.get("categoria_id")
+        kind, subtype = self.validate_kind(data)
+        category_id = data.get("categoria_id") if kind == "PRODUCTO" else None
         candidate = (
             self._identity_text(data.get("nombre")),
             self._identity_text(data.get("marca")),
@@ -199,12 +230,14 @@ class ProductService:
         cursor = self.database.cursor()
         cursor.execute(
             """
-            SELECT id, codigo, nombre, categoria_id, marca, color, unidad, activo
+            SELECT id, codigo, nombre, categoria_id, marca, color, unidad,
+                   tipo, subtipo_servicio, activo
             FROM productos
-            WHERE eliminado = 0 AND categoria_id IS ?
+            WHERE eliminado = 0 AND tipo = ?
+              AND (tipo = 'SERVICIO' OR categoria_id IS ?)
             ORDER BY activo DESC, id DESC
             """,
-            (category_id,),
+            (kind, category_id),
         )
         for row in cursor.fetchall():
             identity = (
@@ -213,7 +246,9 @@ class ProductService:
                 self._identity_text(row["color"]),
                 self._identity_text(row["unidad"]),
             )
-            if identity == candidate:
+            if identity == candidate and (
+                kind == "PRODUCTO" or row["subtipo_servicio"] == subtype
+            ):
                 return dict(row)
         return None
 
@@ -256,6 +291,7 @@ class ProductService:
         raise ValueError("Se agotaron los códigos internos disponibles.")
 
     def create_product(self, data: dict) -> int:
+        kind, subtype = self.validate_kind(data)
         duplicate = self.find_duplicate_product(data)
         if duplicate is not None:
             status = " (desactivado)" if not duplicate["activo"] else ""
@@ -284,9 +320,11 @@ class ProductService:
                 precio,
                 existencia,
                 stock_minimo,
-                proveedor_id
+                proveedor_id,
+                tipo,
+                subtipo_servicio
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 internal_code,
@@ -299,9 +337,11 @@ class ProductService:
                 data.get("unidad") or "pieza",
                 data.get("costo", 0),
                 data.get("precio", 0),
-                data.get("existencia", 0),
-                data.get("stock_minimo", 0),
+                data.get("existencia", 0) if kind == "PRODUCTO" else 0,
+                data.get("stock_minimo", 0) if kind == "PRODUCTO" else 0,
                 data.get("proveedor_id"),
+                kind,
+                subtype,
             ),
         )
 
@@ -312,7 +352,15 @@ class ProductService:
         return int(product_id)
 
     def update_product(self, product_id: int, data: dict) -> None:
+        kind, subtype = self.validate_kind(data)
         cursor = self.database.cursor()
+        cursor.execute(
+            "SELECT existencia, tipo FROM productos WHERE id = ? AND eliminado = 0",
+            (product_id,),
+        )
+        previous = cursor.fetchone()
+        if previous is None:
+            raise ValueError("El registro ya no está disponible.")
 
         cursor.execute(
             """
@@ -331,6 +379,8 @@ class ProductService:
                 existencia = ?,
                 stock_minimo = ?,
                 proveedor_id = ?,
+                tipo = ?,
+                subtipo_servicio = ?,
                 fecha_actualizacion = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -345,13 +395,30 @@ class ProductService:
                 data.get("unidad") or "pieza",
                 data.get("costo", 0),
                 data.get("precio", 0),
-                data.get("existencia", 0),
-                data.get("stock_minimo", 0),
+                data.get("existencia", 0) if kind == "PRODUCTO" else 0,
+                data.get("stock_minimo", 0) if kind == "PRODUCTO" else 0,
                 data.get("proveedor_id"),
+                kind,
+                subtype,
                 product_id,
             ),
         )
 
+        if kind == "SERVICIO" and previous["tipo"] != "SERVICIO":
+            # Registro explícito del ajuste de clasificación; las ventas
+            # anteriores no se tocan y el inventario ficticio deja de existir.
+            old_stock = float(previous["existencia"])
+            if old_stock:
+                cursor.execute(
+                    """INSERT INTO movimientos_inventario (
+                        producto_id, tipo, cantidad, existencia_anterior,
+                        existencia_nueva, referencia
+                    ) VALUES (?, ?, ?, ?, 0, ?)""",
+                    (
+                        product_id, "RECLASIFICACION_SERVICIO", -old_stock,
+                        old_stock, "Convertido a servicio sin existencia",
+                    ),
+                )
         self.database.commit()
 
     def deactivate_product(self, product_id: int) -> None:
@@ -493,6 +560,8 @@ class ProductService:
 
         inventory = []
         for product in products:
+            if product["tipo"] == "SERVICIO":
+                continue
             stock = float(product["existencia"])
             minimum = float(product["stock_minimo"])
             cost = float(product["costo"])

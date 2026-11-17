@@ -49,6 +49,8 @@ def create_database(db: Database) -> None:
             precio REAL NOT NULL DEFAULT 0,
             existencia REAL NOT NULL DEFAULT 0,
             stock_minimo REAL NOT NULL DEFAULT 0,
+            tipo TEXT NOT NULL DEFAULT 'PRODUCTO',
+            subtipo_servicio TEXT,
             proveedor_id INTEGER,
             activo INTEGER NOT NULL DEFAULT 1,
             fecha_creacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -406,6 +408,16 @@ def create_database(db: Database) -> None:
         cursor.execute(
             "ALTER TABLE productos ADD COLUMN eliminado INTEGER NOT NULL DEFAULT 0"
         )
+
+    # Los servicios tienen precio y costo para utilidad, pero no existencias.
+    # Un producto anterior (por ejemplo "Clase") solo se convierte cuando
+    # el usuario lo edita, sin alterar ventas ni movimientos históricos.
+    if "tipo" not in product_columns:
+        cursor.execute(
+            "ALTER TABLE productos ADD COLUMN tipo TEXT NOT NULL DEFAULT 'PRODUCTO'"
+        )
+    if "subtipo_servicio" not in product_columns:
+        cursor.execute("ALTER TABLE productos ADD COLUMN subtipo_servicio TEXT")
 
     # -------------------------------------------------
     # Migración: agregar costo_unitario a detalle_venta

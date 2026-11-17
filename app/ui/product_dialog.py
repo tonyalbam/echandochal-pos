@@ -190,6 +190,7 @@ class ProductDialog(QDialog):
 
         self.product_service = product_service
         self.product = product
+        self._custom_service_profit = bool(product and product.get("tipo") == "SERVICIO")
 
         self.setWindowTitle(
             "Editar producto" if product else "Nuevo producto"
@@ -199,6 +200,11 @@ class ProductDialog(QDialog):
 
         self._create_widgets()
         self._load_catalogs()
+        self.tipo.currentIndexChanged.connect(self._toggle_kind)
+        self.subtipo_servicio.currentIndexChanged.connect(self._service_subtype_changed)
+        self.precio.textChanged.connect(self._price_changed)
+        self.utilidad_servicio.textEdited.connect(self._mark_custom_profit)
+        self.utilidad_servicio.textChanged.connect(self._update_service_profit_hint)
         if product:
             for field in (
                 self.costo, self.precio, self.existencia, self.stock_minimo
@@ -230,10 +236,23 @@ class ProductDialog(QDialog):
             self.codigo.setText(
                 self.product_service.get_next_internal_code()
             )
+        self._toggle_kind()
 
     def _create_widgets(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
+
+        self.tipo = QComboBox()
+        self.tipo.addItem("Producto físico (con existencias)", "PRODUCTO")
+        self.tipo.addItem("Servicio (sin inventario)", "SERVICIO")
+        self.subtipo_servicio = QComboBox()
+        for service_type in ProductService.SERVICE_TYPES:
+            self.subtipo_servicio.addItem(service_type)
+        self.tipo_info = QLabel(
+            "Los servicios no consumen inventario. Puedes vender varios "
+            "servicios y productos en un mismo cobro."
+        )
+        self.tipo_info.setWordWrap(True)
 
         self.codigo = QLineEdit()
         self.codigo.setReadOnly(True)
@@ -272,10 +291,20 @@ class ProductDialog(QDialog):
 
         self.existencia = self._create_quantity_spinbox()
         self.stock_minimo = self._create_quantity_spinbox()
+        self.utilidad_servicio = self._create_money_spinbox()
+        self.utilidad_servicio.setToolTip(
+            "Ganancia bruta que deseas registrar por cada servicio. "
+            "El sistema calcula el costo interno como precio menos utilidad."
+        )
+        self.utilidad_info = QLabel()
+        self.utilidad_info.setWordWrap(True)
 
         self.proveedor = QComboBox()
         self.proveedor.setEditable(False)
 
+        form.addRow("Tipo de registro:", self.tipo)
+        form.addRow("Clase de servicio:", self.subtipo_servicio)
+        form.addRow("", self.tipo_info)
         form.addRow("Código interno:", self.codigo)
         form.addRow("Código de barras:", self.codigo_barras)
         form.addRow("Código QR:", self.codigo_qr)
@@ -295,12 +324,15 @@ class ProductDialog(QDialog):
         manage_units.clicked.connect(self._manage_units)
         unit_row.addWidget(manage_units)
         form.addRow("Unidad:", unit_row)
-        form.addRow("Costo:", self.costo)
-        form.addRow("Precio de venta:", self.precio)
+        form.addRow("Costo interno:", self.costo)
+        form.addRow("Precio al cliente:", self.precio)
+        form.addRow("Utilidad por servicio:", self.utilidad_servicio)
+        form.addRow("", self.utilidad_info)
         form.addRow("Existencia:", self.existencia)
         form.addRow("Stock mínimo:", self.stock_minimo)
         form.addRow("Proveedor:", self.proveedor)
 
+        self.form = form
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(
@@ -320,6 +352,45 @@ class ProductDialog(QDialog):
     @staticmethod
     def _create_quantity_spinbox() -> ProductNumericInput:
         return ProductNumericInput(decimals=3)
+
+    def _toggle_kind(self, *_args) -> None:
+        service = self.tipo.currentData() == "SERVICIO"
+        for field in (self.subtipo_servicio, self.tipo_info,
+                      self.utilidad_servicio, self.utilidad_info):
+            field.setVisible(service)
+            label = self.form.labelForField(field)
+            if label is not None:
+                label.setVisible(service)
+        for field in (self.costo, self.existencia, self.stock_minimo):
+            field.setVisible(not service)
+            label = self.form.labelForField(field)
+            if label is not None:
+                label.setVisible(not service)
+        self.categoria.setEnabled(not service)
+        if service and not self._custom_service_profit:
+            self.utilidad_servicio.setValue(self.precio.value())
+        self._update_service_profit_hint()
+
+    def _service_subtype_changed(self, *_args) -> None:
+        self._update_service_profit_hint()
+
+    def _mark_custom_profit(self, *_args) -> None:
+        self._custom_service_profit = True
+
+    def _price_changed(self, *_args) -> None:
+        if self.tipo.currentData() == "SERVICIO" and not self._custom_service_profit:
+            self.utilidad_servicio.setValue(self.precio.value())
+        self._update_service_profit_hint()
+
+    def _update_service_profit_hint(self, *_args) -> None:
+        if self.tipo.currentData() == "SERVICIO":
+            price = self.precio.value()
+            profit = self.utilidad_servicio.value()
+            self.utilidad_info.setText(
+                f"Precio: $ {price:,.2f} | Utilidad bruta: $ {profit:,.2f} | "
+                f"Costo interno: $ {price-profit:,.2f}. "
+                "La utilidad final puede variar por descuentos y comisiones."
+            )
 
     def _fill_from_matching_name(self, _selection: str = "") -> None:
         """Sugiere campos de un producto homónimo sin modificar el original."""
@@ -356,8 +427,18 @@ class ProductDialog(QDialog):
             unavailable.append("unidad")
 
         self.marca.setText(existing.get("marca") or "")
+        if existing.get("tipo") == "SERVICIO":
+            self.tipo.setCurrentIndex(self.tipo.findData("SERVICIO"))
+            self.subtipo_servicio.setCurrentText(
+                existing.get("subtipo_servicio") or "Otros servicios"
+            )
+            self._custom_service_profit = True
         self.costo.setValue(existing.get("costo") or 0)
         self.precio.setValue(existing.get("precio") or 0)
+        if existing.get("tipo") == "SERVICIO":
+            self.utilidad_servicio.setValue(
+                max(0, self.precio.value() - self.costo.value())
+            )
         self.stock_minimo.setValue(existing.get("stock_minimo") or 0)
 
         supplier_id = existing.get("proveedor_id")
@@ -432,6 +513,12 @@ class ProductDialog(QDialog):
             )
 
     def _load_product(self, product: dict) -> None:
+        kind = product.get("tipo") or "PRODUCTO"
+        self.tipo.setCurrentIndex(self.tipo.findData(kind))
+        if kind == "SERVICIO":
+            self.subtipo_servicio.setCurrentText(
+                product.get("subtipo_servicio") or "Otros servicios"
+            )
         self.codigo.setText(product["codigo"])
         self.codigo_barras.setText(product["codigo_barras"] or "")
         self.codigo_qr.setText(product["codigo_qr"] or "")
@@ -451,6 +538,10 @@ class ProductDialog(QDialog):
         self.precio.setValue(float(product["precio"] or 0))
         self.existencia.setValue(float(product["existencia"] or 0))
         self.stock_minimo.setValue(float(product["stock_minimo"] or 0))
+        if kind == "SERVICIO":
+            self.utilidad_servicio.setValue(
+                max(0, self.precio.value() - self.costo.value())
+            )
 
         category_id = product.get("categoria_id")
 
@@ -496,24 +587,43 @@ class ProductDialog(QDialog):
             self.nombre.setFocus()
             return
 
-        if self.categoria.currentData() is None or not self.unidad.currentText():
+        service = self.tipo.currentData() == "SERVICIO"
+        if (not service and self.categoria.currentData() is None) or not self.unidad.currentText():
             QMessageBox.warning(self, "Dato faltante",
                 "Selecciona una categoría y una unidad válidas.")
             return
 
+        if service:
+            price = self.precio.value()
+            profit = self.utilidad_servicio.value()
+            if profit > price:
+                QMessageBox.warning(
+                    self, "Utilidad inválida",
+                    "La utilidad por servicio no puede superar el precio al cliente."
+                )
+                return
+            cost = round(price - profit, 2)
+        else:
+            cost = self.costo.value()
+
         data = {
+            "tipo": self.tipo.currentData(),
+            "subtipo_servicio": self.subtipo_servicio.currentText() if service else None,
             "codigo": codigo,
             "codigo_barras": self.codigo_barras.text().strip(),
             "codigo_qr": self.codigo_qr.text().strip(),
             "nombre": nombre,
-            "categoria_id": self.categoria.currentData(),
+            "categoria_id": (
+                (self.product.get("categoria_id") if self.product else None)
+                if service else self.categoria.currentData()
+            ),
             "marca": self.marca.text().strip(),
             "color": self.color.text().strip(),
             "unidad": self.unidad.currentText(),
-            "costo": self.costo.value(),
+            "costo": cost,
             "precio": self.precio.value(),
-            "existencia": self.existencia.value(),
-            "stock_minimo": self.stock_minimo.value(),
+            "existencia": 0 if service else self.existencia.value(),
+            "stock_minimo": 0 if service else self.stock_minimo.value(),
             "proveedor_id": self.proveedor.currentData(),
         }
 
@@ -534,6 +644,19 @@ class ProductDialog(QDialog):
                     "Revisa los datos o utiliza el producto existente.",
                 )
                 self.color.setFocus()
+                return
+
+        if (self.product and service and
+                self.product.get("tipo") != "SERVICIO" and
+                float(self.product.get("existencia") or 0) != 0):
+            reply = QMessageBox.question(
+                self, "Convertir a servicio",
+                "Se quitará del inventario la existencia actual "
+                f"({float(self.product['existencia']):g}) de este registro. "
+                "Las ventas y compras anteriores se conservarán. "
+                "¿Quieres convertirlo a servicio?"
+            )
+            if reply != QMessageBox.StandardButton.Yes:
                 return
 
         try:

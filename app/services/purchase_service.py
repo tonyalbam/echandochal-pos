@@ -51,7 +51,7 @@ class PurchaseService:
                 COALESCE(c.nombre, '') AS categoria
             FROM productos p
             LEFT JOIN categorias c ON c.id = p.categoria_id
-            WHERE p.activo = 1 AND p.eliminado = 0
+            WHERE p.activo = 1 AND p.eliminado = 0 AND p.tipo = 'PRODUCTO'
               AND (p.codigo = ? OR p.codigo_barras = ?)
             LIMIT 1
             """,
@@ -77,7 +77,7 @@ class PurchaseService:
                 COALESCE(c.nombre, '') AS categoria
             FROM productos p
             LEFT JOIN categorias c ON c.id = p.categoria_id
-            WHERE p.activo = 1 AND p.eliminado = 0
+            WHERE p.activo = 1 AND p.eliminado = 0 AND p.tipo = 'PRODUCTO'
               AND (
                   p.codigo LIKE ?
                   OR COALESCE(p.codigo_barras, '') LIKE ?
@@ -203,7 +203,7 @@ class PurchaseService:
 
                 cursor.execute(
                     """
-                    SELECT id, nombre, existencia, activo
+                    SELECT id, nombre, existencia, activo, tipo
                     FROM productos
                     WHERE id = ?
                     """,
@@ -220,6 +220,11 @@ class PurchaseService:
                 if not product["activo"]:
                     raise ValueError(
                         f"El producto '{product['nombre']}' está inactivo."
+                    )
+                if product["tipo"] == "SERVICIO":
+                    raise ValueError(
+                        f"'{product['nombre']}' es un servicio y no se recibe "
+                        "como mercancía en Nueva Compra."
                     )
 
             # Cabecera de la compra.

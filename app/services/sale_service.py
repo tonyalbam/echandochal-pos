@@ -34,10 +34,13 @@ class SaleService:
                 p.codigo_qr,
                 p.nombre,
                 p.unidad,
+                p.tipo,
                 p.precio,
                 p.existencia,
                 p.stock_minimo,
-                COALESCE(c.nombre, '') AS categoria,
+                CASE WHEN p.tipo = 'SERVICIO'
+                     THEN COALESCE(p.subtipo_servicio, 'Otros servicios')
+                     ELSE COALESCE(c.nombre, '') END AS categoria,
                 COALESCE(p.marca, '') AS marca,
                 COALESCE(p.color, '') AS color
             FROM productos p
@@ -70,10 +73,12 @@ class SaleService:
             """
             SELECT
                 p.id, p.codigo, p.codigo_barras, p.codigo_qr, p.nombre,
-                p.unidad, p.precio, p.existencia, p.stock_minimo,
+                p.unidad, p.tipo, p.precio, p.existencia, p.stock_minimo,
                 COALESCE(p.marca, '') AS marca,
                 COALESCE(p.color, '') AS color,
-                COALESCE(c.nombre, '') AS categoria
+                CASE WHEN p.tipo = 'SERVICIO'
+                     THEN COALESCE(p.subtipo_servicio, 'Otros servicios')
+                     ELSE COALESCE(c.nombre, '') END AS categoria
             FROM productos p
             LEFT JOIN categorias c ON c.id = p.categoria_id
             WHERE p.activo = 1 AND p.eliminado = 0
@@ -106,14 +111,18 @@ class SaleService:
         cursor = self.database.cursor()
         cursor.execute(
             """
-            SELECT existencia
+            SELECT existencia, tipo
             FROM productos
             WHERE id = ? AND activo = 1 AND eliminado = 0
             """,
             (int(product_id),),
         )
         row = cursor.fetchone()
-        return float(row["existencia"]) if row else None
+        if row is None:
+            return None
+        # Permite editar cantidades en el carrito sin usar stock ficticio.
+        # El formulario de cantidad limita a 999999 por renglón.
+        return 1_000_000_000.0 if row["tipo"] == "SERVICIO" else float(row["existencia"])
 
     def get_commission_rate(self) -> float:
         """Obtiene la comisión configurada para Mercado Libre."""
@@ -265,7 +274,7 @@ class SaleService:
             for product_id, quantity in quantities_by_product.items():
                 cursor.execute(
                     """
-                    SELECT nombre, existencia
+                    SELECT nombre, existencia, tipo
                     FROM productos
                     WHERE id = ?
                       AND activo = 1 AND eliminado = 0
@@ -279,6 +288,9 @@ class SaleService:
                     raise ValueError(
                         "Uno de los productos ya no está disponible."
                     )
+
+                if product["tipo"] == "SERVICIO":
+                    continue
 
                 existencia = float(product["existencia"])
 
@@ -345,16 +357,16 @@ class SaleService:
 
                 cursor.execute(
                     """
-                    SELECT costo
+                    SELECT costo, tipo
                     FROM productos
                     WHERE id = ?
                     """,
                     (product_id,),
                     )
                 
-                product_cost = float(
-                    cursor.fetchone()["costo"]
-                    )
+                product_info = cursor.fetchone()
+                product_cost = float(product_info["costo"])
+                is_service = product_info["tipo"] == "SERVICIO"
                 cursor.execute(
                     """
                     INSERT INTO detalle_venta (
@@ -386,6 +398,10 @@ class SaleService:
                         item["total_neto"],
                         ),
                     )
+
+                if is_service:
+                    # Registra ingreso/utilidad sin consumir inventario físico.
+                    continue
 
                 cursor.execute(
                     """

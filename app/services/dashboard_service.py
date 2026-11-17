@@ -217,7 +217,7 @@ class DashboardService:
                 0
             )
             FROM productos
-            WHERE activo = 1
+            WHERE activo = 1 AND eliminado = 0 AND tipo = 'PRODUCTO'
             """
         )
 
@@ -232,7 +232,7 @@ class DashboardService:
             """
             SELECT COUNT(*)
             FROM productos
-            WHERE activo = 1
+            WHERE activo = 1 AND eliminado = 0 AND tipo = 'PRODUCTO'
               AND existencia <= stock_minimo
             """
         )
@@ -423,7 +423,7 @@ class DashboardService:
                LEFT JOIN categorias c ON c.id = p.categoria_id
                LEFT JOIN detalle_venta dv ON dv.producto_id = p.id
                LEFT JOIN ventas v ON v.id = dv.venta_id
-               WHERE p.activo = 1 AND p.eliminado = 0 AND p.existencia > 0
+               WHERE p.activo = 1 AND p.eliminado = 0 AND p.tipo = 'PRODUCTO' AND p.existencia > 0
                GROUP BY p.id""",
         )
         aged = []
@@ -460,7 +460,7 @@ class DashboardService:
                LEFT JOIN categorias c ON c.id = p.categoria_id
                LEFT JOIN detalle_venta dv ON dv.producto_id = p.id
                LEFT JOIN ventas v ON v.id = dv.venta_id
-               WHERE p.activo = 1 AND p.eliminado = 0 AND p.existencia > 0
+               WHERE p.activo = 1 AND p.eliminado = 0 AND p.tipo = 'PRODUCTO' AND p.existencia > 0
                GROUP BY p.id""",
             (f"{year}-%",),
         )

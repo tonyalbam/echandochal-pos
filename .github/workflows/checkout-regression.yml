@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/checkout-amount-fields
+      - feature/servicios-sin-inventario
   workflow_dispatch:
 
 jobs:
