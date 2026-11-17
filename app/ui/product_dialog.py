@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from app.services.product_service import ProductService
@@ -319,12 +320,16 @@ class ProductDialog(QDialog):
         form.addRow("Categoría:", category_row)
         form.addRow("Marca:", self.marca)
         form.addRow("Color:", self.color)
-        unit_row = QHBoxLayout()
+        # Contenedor explícito para ocultar por completo el renglón
+        # (etiqueta, selector y botón) al elegir Servicio.
+        self.unit_container = QWidget()
+        unit_row = QHBoxLayout(self.unit_container)
+        unit_row.setContentsMargins(0, 0, 0, 0)
         unit_row.addWidget(self.unidad, 1)
         manage_units = QPushButton("Administrar...")
         manage_units.clicked.connect(self._manage_units)
         unit_row.addWidget(manage_units)
-        form.addRow("Unidad:", unit_row)
+        form.addRow("Unidad:", self.unit_container)
         form.addRow("Costo interno:", self.costo)
         form.addRow("Precio al cliente:", self.precio)
         form.addRow("Utilidad por servicio:", self.utilidad_servicio)
@@ -362,7 +367,10 @@ class ProductDialog(QDialog):
             label = self.form.labelForField(field)
             if label is not None:
                 label.setVisible(service)
-        for field in (self.costo, self.existencia, self.stock_minimo):
+        for field in (
+            self.costo, self.existencia, self.stock_minimo,
+            self.color, self.unit_container, self.proveedor,
+        ):
             field.setVisible(not service)
             label = self.form.labelForField(field)
             if label is not None:
@@ -589,9 +597,13 @@ class ProductDialog(QDialog):
             return
 
         service = self.tipo.currentData() == "SERVICIO"
-        if (not service and self.categoria.currentData() is None) or not self.unidad.currentText():
-            QMessageBox.warning(self, "Dato faltante",
-                "Selecciona una categoría y una unidad válidas.")
+        if not service and (
+            self.categoria.currentData() is None or not self.unidad.currentText()
+        ):
+            QMessageBox.warning(
+                self, "Dato faltante",
+                "Selecciona una categoría y una unidad válidas."
+            )
             return
 
         if service:
@@ -619,13 +631,13 @@ class ProductDialog(QDialog):
                 if service else self.categoria.currentData()
             ),
             "marca": self.marca.text().strip(),
-            "color": self.color.text().strip(),
-            "unidad": self.unidad.currentText(),
+            "color": "" if service else self.color.text().strip(),
+            "unidad": "" if service else self.unidad.currentText(),
             "costo": cost,
             "precio": self.precio.value(),
             "existencia": 0 if service else self.existencia.value(),
             "stock_minimo": 0 if service else self.stock_minimo.value(),
-            "proveedor_id": self.proveedor.currentData(),
+            "proveedor_id": None if service else self.proveedor.currentData(),
         }
 
         if not self.product:
@@ -634,17 +646,22 @@ class ProductDialog(QDialog):
                 status = (
                     " (desactivado)" if not duplicate["activo"] else ""
                 )
+                description = (
+                    "Ya existe un servicio con el mismo Nombre, Marca y "
+                    "Clase de servicio."
+                    if service else
+                    "Ya existe un producto con el mismo Nombre, Categoría, "
+                    "Marca, Color y Unidad."
+                )
                 QMessageBox.warning(
                     self,
-                    "Producto duplicado",
-                    "Ya existe un producto con el mismo Nombre, Categoría, "
-                    "Marca, Color y Unidad.\n\n"
-                    f"Producto: {duplicate['nombre']}\n"
+                    "Registro duplicado",
+                    f"{description}\n\n"
+                    f"Registro: {duplicate['nombre']}\n"
                     f"Código: {duplicate['codigo']}{status}\n\n"
-                    "No se puede registrar nuevamente. "
-                    "Revisa los datos o utiliza el producto existente.",
+                    "Revisa los datos o utiliza el registro existente.",
                 )
-                self.color.setFocus()
+                (self.nombre if service else self.color).setFocus()
                 return
 
         if (self.product and service and

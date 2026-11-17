@@ -210,20 +210,23 @@ class ProductService:
         return " ".join(str(value or "").split()).casefold()
 
     def find_duplicate_product(self, data: dict) -> Optional[dict]:
-        """Localiza el mismo nombre, categoría, marca, color y unidad.
+        """Detecta duplicados por los atributos propios de cada tipo.
 
-        Se revisan los registros activos e inactivos que aún pertenecen al
-        catálogo. Los productos eliminados lógicamente no bloquean nuevas altas.
-        No se comparan precios, proveedores, códigos ni existencias.
+        Producto: nombre, categoría, marca, color y unidad.
+        Servicio: nombre, marca y clase de servicio (sin unidad ni color).
+        Se revisan registros activos e inactivos, nunca eliminados.
         """
         kind, subtype = self.validate_kind(data)
         category_id = data.get("categoria_id") if kind == "PRODUCTO" else None
         candidate = (
             self._identity_text(data.get("nombre")),
             self._identity_text(data.get("marca")),
-            self._identity_text(data.get("color")),
-            self._identity_text(data.get("unidad") or "pieza"),
         )
+        if kind == "PRODUCTO":
+            candidate += (
+                self._identity_text(data.get("color")),
+                self._identity_text(data.get("unidad") or "pieza"),
+            )
         if not candidate[0]:
             return None
 
@@ -243,9 +246,12 @@ class ProductService:
             identity = (
                 self._identity_text(row["nombre"]),
                 self._identity_text(row["marca"]),
-                self._identity_text(row["color"]),
-                self._identity_text(row["unidad"]),
             )
+            if kind == "PRODUCTO":
+                identity += (
+                    self._identity_text(row["color"]),
+                    self._identity_text(row["unidad"]),
+                )
             if identity == candidate and (
                 kind == "PRODUCTO" or row["subtipo_servicio"] == subtype
             ):
@@ -295,9 +301,12 @@ class ProductService:
         duplicate = self.find_duplicate_product(data)
         if duplicate is not None:
             status = " (desactivado)" if not duplicate["activo"] else ""
+            attributes = (
+                "Nombre, Marca y Clase de servicio" if kind == "SERVICIO"
+                else "Nombre, Categoría, Marca, Color y Unidad"
+            )
             raise ValueError(
-                "Ya existe un producto con el mismo Nombre, Categoría, "
-                "Marca, Color y Unidad. "
+                f"Ya existe un registro con el mismo {attributes}. "
                 f"Código existente: {duplicate['codigo']}{status}. "
                 "No se puede registrar un producto duplicado."
             )
@@ -333,13 +342,13 @@ class ProductService:
                 data["nombre"],
                 data.get("categoria_id"),
                 data.get("marca") or None,
-                data.get("color") or None,
-                data.get("unidad") or "pieza",
+                (data.get("color") or None) if kind == "PRODUCTO" else None,
+                (data.get("unidad") or "pieza") if kind == "PRODUCTO" else "",
                 data.get("costo", 0),
                 data.get("precio", 0),
                 data.get("existencia", 0) if kind == "PRODUCTO" else 0,
                 data.get("stock_minimo", 0) if kind == "PRODUCTO" else 0,
-                data.get("proveedor_id"),
+                data.get("proveedor_id") if kind == "PRODUCTO" else None,
                 kind,
                 subtype,
             ),
@@ -391,13 +400,13 @@ class ProductService:
                 data["nombre"],
                 data.get("categoria_id"),
                 data.get("marca") or None,
-                data.get("color") or None,
-                data.get("unidad") or "pieza",
+                (data.get("color") or None) if kind == "PRODUCTO" else None,
+                (data.get("unidad") or "pieza") if kind == "PRODUCTO" else "",
                 data.get("costo", 0),
                 data.get("precio", 0),
                 data.get("existencia", 0) if kind == "PRODUCTO" else 0,
                 data.get("stock_minimo", 0) if kind == "PRODUCTO" else 0,
-                data.get("proveedor_id"),
+                data.get("proveedor_id") if kind == "PRODUCTO" else None,
                 kind,
                 subtype,
                 product_id,

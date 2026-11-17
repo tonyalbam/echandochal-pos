@@ -273,6 +273,116 @@ class ServiceCatalogAndSaleTest(unittest.TestCase):
         finally:
             dialog.close()
 
+    def test_new_service_does_not_save_unit_color_or_supplier(self):
+        cursor = self.db.cursor()
+        cursor.execute("INSERT INTO proveedores (nombre) VALUES ('Proveedor externo')")
+        supplier_id = cursor.lastrowid
+        self.db.commit()
+        new_id = self.catalog.create_product({
+            "nombre": "Arreglo de costura", "tipo": "SERVICIO",
+            "subtipo_servicio": "Costura", "marca": "Echando Chal",
+            "unidad": "pieza", "color": "Azul", "proveedor_id": supplier_id,
+            "costo": 20, "precio": 100,
+        })
+        saved = self.catalog.get_product(new_id)
+        self.assertEqual(saved["tipo"], "SERVICIO")
+        self.assertEqual(saved["unidad"], "")
+        self.assertIsNone(saved["color"])
+        self.assertIsNone(saved["proveedor_id"])
+        self.assertEqual(saved["precio"] - saved["costo"], 80)
+
+    def test_edit_service_clears_old_unit_color_and_supplier(self):
+        cursor = self.db.cursor()
+        cursor.execute("INSERT INTO proveedores (nombre) VALUES ('Proveedor previo')")
+        supplier_id = cursor.lastrowid
+        cursor.execute(
+            """UPDATE productos
+               SET unidad = 'pieza', color = 'Rojo', proveedor_id = ?
+               WHERE id = ?""",
+            (supplier_id, self.service_id),
+        )
+        self.db.commit()
+        original = self.catalog.get_product(self.service_id)
+        self.assertEqual(original["unidad"], "pieza")
+        self.catalog.update_product(self.service_id, {
+            **original,
+            "unidad": "hora",
+            "color": "Negro",
+            "proveedor_id": supplier_id,
+        })
+        refreshed = self.catalog.get_product(self.service_id)
+        self.assertEqual(refreshed["unidad"], "")
+        self.assertIsNone(refreshed["color"])
+        self.assertIsNone(refreshed["proveedor_id"])
+        self.assertEqual(refreshed["precio"], 200)
+
+    def test_conversion_to_service_drops_unit_color_supplier(self):
+        cursor = self.db.cursor()
+        cursor.execute("INSERT INTO proveedores (nombre) VALUES ('Tienda externa')")
+        supplier_id = cursor.lastrowid
+        self.db.commit()
+        legacy_id = self.catalog.create_product({
+            "nombre": "Clase con existencias", "categoria_id": self.category,
+            "unidad": "pieza", "color": "Verde",
+            "proveedor_id": supplier_id,
+            "costo": 40, "precio": 120, "existencia": 999999,
+        })
+        legacy = self.catalog.get_product(legacy_id)
+        self.catalog.update_product(legacy_id, {
+            **legacy, "tipo": "SERVICIO", "subtipo_servicio": "Clases",
+            "costo": 20, "precio": 120,
+        })
+        saved = self.catalog.get_product(legacy_id)
+        self.assertEqual(saved["unidad"], "")
+        self.assertIsNone(saved["color"])
+        self.assertIsNone(saved["proveedor_id"])
+        self.assertEqual(saved["existencia"], 0)
+        self.assertEqual(saved["codigo"], legacy["codigo"])
+
+    def test_service_duplicate_ignores_unit_color_and_supplier(self):
+        with self.assertRaisesRegex(ValueError, "producto duplicado"):
+            self.catalog.create_product({
+                "nombre": "  clase de crochet  ", "marca": "",
+                "tipo": "SERVICIO", "subtipo_servicio": "Clases",
+                "unidad": "hora", "color": "Naranja",
+                "proveedor_id": 9999, "precio": 200, "costo": 50,
+            })
+
+    def test_service_dialog_hides_nonapplicable_fields_and_saves_blank(self):
+        dialog = ProductDialog(self.catalog)
+        dialog.show()
+        self.app.processEvents()
+        try:
+            self.assertTrue(dialog.color.isVisible())
+            self.assertTrue(dialog.unit_container.isVisible())
+            self.assertTrue(dialog.proveedor.isVisible())
+            dialog.tipo.setCurrentIndex(dialog.tipo.findData("SERVICIO"))
+            self.app.processEvents()
+            for field in (
+                dialog.color, dialog.unit_container, dialog.unidad,
+                dialog.proveedor,
+            ):
+                with self.subTest(field=field):
+                    self.assertFalse(field.isVisible())
+            self.assertFalse(dialog.form.labelForField(dialog.color).isVisible())
+            self.assertFalse(dialog.form.labelForField(dialog.unit_container).isVisible())
+            self.assertFalse(dialog.form.labelForField(dialog.proveedor).isVisible())
+            dialog.nombre.setText("Taller introductorio")
+            dialog.subtipo_servicio.setCurrentText("Talleres")
+            dialog.precio.setValue(180)
+            dialog.utilidad_servicio.setValue(150)
+            dialog._save()
+            self.assertEqual(dialog.result(), dialog.DialogCode.Accepted)
+            saved = next(
+                p for p in self.catalog.list_products()
+                if p["nombre"] == "Taller introductorio"
+            )
+            self.assertEqual(saved["unidad"], "")
+            self.assertEqual(saved["color"], "")
+            self.assertEqual(saved["proveedor"], "")
+        finally:
+            dialog.close()
+
     def test_service_type_stays_after_schema_second_start(self):
         create_database(self.db)
         self.assertEqual(self.catalog.get_product(self.service_id)["tipo"], "SERVICIO")
