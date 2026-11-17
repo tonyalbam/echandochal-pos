@@ -2,7 +2,6 @@ from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt, QRegularExpress
 from PySide6.QtGui import QIntValidator, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
-    QCheckBox,
     QCompleter,
     QComboBox,
     QDialog,
@@ -26,8 +25,6 @@ from app.database.connection import Database
 from app.services.sale_cart_service import (
     set_sale_quantity,
     calculate_discount,
-    expand_sale_items,
-    group_sale_items,
     has_available_inventory,
 )
 from app.services.sale_service import SaleService
@@ -465,23 +462,6 @@ class SaleWindow(QWidget):
 
         layout.addLayout(entrada_layout)
 
-        mode_layout = QHBoxLayout()
-        self.venta_voluminosa = QCheckBox("Venta voluminosa")
-        self.venta_voluminosa.setToolTip(
-            "Agrupa en una fila las unidades del mismo producto."
-        )
-        self.venta_voluminosa.toggled.connect(
-            self._cambiar_modo_volumen
-        )
-        mode_help = QLabel(
-            "Desactivada: escaneos separados; C o doble clic ajusta cantidad."
-        )
-        mode_help.setStyleSheet("color: palette(window-text);")
-        mode_layout.addWidget(self.venta_voluminosa)
-        mode_layout.addWidget(mode_help)
-        mode_layout.addStretch()
-        layout.addLayout(mode_layout)
-
         self.tabla = SaleItemsTable(0, 9)
 
         self.tabla.setHorizontalHeaderLabels(
@@ -724,14 +704,6 @@ class SaleWindow(QWidget):
             self.codigo_input.setFocus()
             return
 
-        if self.venta_voluminosa.isChecked():
-            for item in self.items:
-                if item["producto_id"] == producto["id"]:
-                    item["cantidad"] = float(item["cantidad"]) + 1
-                    self._refrescar_tabla()
-                    self.codigo_input.setFocus()
-                    return
-
         self.items.append(
             {
                 "producto_id": producto["id"],
@@ -766,13 +738,6 @@ class SaleWindow(QWidget):
             "Sin inventario",
             "¡Ya no hay inventario disponible! Favor de agregar más producto",
         )
-
-    def _cambiar_modo_volumen(self, checked: bool) -> None:
-        if checked:
-            self.items, _ = group_sale_items(self.items)
-        else:
-            self.items = expand_sale_items(self.items)
-        self._refrescar_tabla()
 
     def _refrescar_tabla(self) -> None:
         self.tabla.setRowCount(0)

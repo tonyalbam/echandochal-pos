@@ -188,16 +188,19 @@ class SaleQuantityUiTest(unittest.TestCase):
             cls.return_value.exec.assert_called_once()
         self.assertEqual(self.window.items[0]["cantidad"], 3)
 
-    def test_switching_volume_mode_preserves_edited_units(self):
-        self.window._agregar_producto(self.product)
+    def test_volume_mode_checkbox_is_removed(self):
+        self.assertFalse(hasattr(self.window, "venta_voluminosa"))
+    def test_each_row_keeps_its_own_editable_quantity(self):
+        # Escanear el mismo producto vuelve a agregar una fila independiente.
         self.assertTrue(self.window._establecer_cantidad(0, 3))
-        self.assertEqual(sum(x["cantidad"] for x in self.window.items), 4)
-        self.window.venta_voluminosa.setChecked(True)
-        self.assertEqual(len(self.window.items), 1)
-        self.assertEqual(self.window.items[0]["cantidad"], 4)
-        self.window.venta_voluminosa.setChecked(False)
-        self.assertEqual(len(self.window.items), 4)
-        self.assertTrue(all(x["cantidad"] == 1 for x in self.window.items))
+        self.window._agregar_producto(self.product)
+        self.assertEqual(self.window.tabla.rowCount(), 2)
+        self.assertEqual([item["cantidad"] for item in self.window.items], [3, 1])
+        self.assertTrue(self.window._establecer_cantidad(1, 2))
+        self.assertEqual([item["cantidad"] for item in self.window.items], [3, 2])
+        self.assertEqual(self.window.tabla.item(0, 7).text(), "$ 300.00")
+        self.assertEqual(self.window.tabla.item(1, 7).text(), "$ 200.00")
+        self.assertIn("$ 500.00", self.window.total_label.text())
 
     def test_sale_service_rejects_duplicate_rows_above_current_stock(self):
         self.window._agregar_producto(self.product)
