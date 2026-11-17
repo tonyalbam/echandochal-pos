@@ -6,7 +6,7 @@ debe mantenerlos durante toda la vida de la ventana.
 
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, QSize, QSizeF, Qt
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QRectF, QSize, QSizeF
 from PySide6.QtGui import QPageSize, QPainter
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
@@ -30,10 +30,20 @@ class TicketPreviewDialog(QDialog):
         self.resize(650, 740)
         self.setMinimumSize(410, 430)
 
+        # Abrir el PDF desde memoria evita que PDFium bloquee el archivo
+        # temporal en Windows después de cerrar la vista previa.
+        self._pdf_data = QByteArray(Path(pdf_path).read_bytes())
+        self._pdf_buffer = QBuffer(self)
+        self._pdf_buffer.setData(self._pdf_data)
+        if not self._pdf_buffer.open(QIODevice.OpenModeFlag.ReadOnly):
+            raise OSError("No se pudo preparar el ticket para su visualización.")
+
         self.document = QPdfDocument(self)
-        error = self.document.load(str(pdf_path))
+        self.document.load(self._pdf_buffer)
         if self.document.pageCount() < 1:
+            error = self.document.error()
             self.document.close()
+            self._pdf_buffer.close()
             raise ValueError(f"No se pudo abrir el PDF del ticket: {error}")
 
         layout = QVBoxLayout(self)
@@ -69,6 +79,7 @@ class TicketPreviewDialog(QDialog):
         """Libera el archivo para permitir borrar el PDF temporal en Windows."""
         self.pdf_view.setDocument(None)
         self.document.close()
+        self._pdf_buffer.close()
 
     def _print_ticket(self) -> None:
         """El operador elige impresora; el PDF se imprime sin guardarlo."""

@@ -124,6 +124,21 @@ class TicketPreviewUiTest(unittest.TestCase):
                 preview.release_document()
                 preview.close()
 
+    def test_preview_keeps_pdf_in_memory_not_locked_on_disk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.window.ticket_service.generate_sale_ticket(
+                self.sale["id"], Path(directory) / "ticket.pdf"
+            )
+            preview = TicketPreviewDialog(path, self.sale["folio"], self.window)
+            try:
+                # En Windows falla si QPdfDocument conserva un descriptor abierto.
+                path.unlink()
+                self.assertFalse(path.exists())
+                self.assertEqual(preview.document.pageCount(), 1)
+            finally:
+                preview.release_document()
+                preview.close()
+
     def test_printing_pdf_to_virtual_printer_without_save_dialog(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.window.ticket_service.generate_sale_ticket(
