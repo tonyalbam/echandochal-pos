@@ -19,7 +19,8 @@ class AnnualAnalyticsCard(QFrame):
     def __init__(self, heading: str, icon: str, parent=None):
         super().__init__(parent)
         self.setObjectName("analyticsCard")
-        self.setMinimumHeight(150)
+        # La ficha completa ocupa varias líneas; no recortar identificadores.
+        self.setMinimumHeight(225)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 14)
         self.icon_label = QLabel(icon)
@@ -33,15 +34,39 @@ class AnnualAnalyticsCard(QFrame):
         self.subtitle = QLabel("")
         self.subtitle.setObjectName("analyticsSubtitle")
         self.subtitle.setWordWrap(True)
+        self.identity = QLabel("")
+        self.identity.setObjectName("analyticsIdentity")
+        self.identity.setTextFormat(Qt.TextFormat.PlainText)
+        self.identity.setWordWrap(True)
         layout.addWidget(self.icon_label)
         layout.addWidget(self.value)
         layout.addWidget(self.title_label)
+        layout.addWidget(self.identity)
         layout.addWidget(self.subtitle)
         layout.addStretch()
+        self.identity.hide()
 
-    def update_contents(self, value: str, detail: str) -> None:
+    def update_contents(
+        self, value: str, detail: str, product: dict | None = None
+    ) -> None:
         self.value.setText(value)
         self.subtitle.setText(detail)
+        if product is None:
+            self.identity.clear()
+            self.identity.hide()
+            self.setToolTip("")
+            return
+        # Texto completo visible, incluso para categorías o marcas largas.
+        # Mantener la métrica original separada de los identificadores.
+        identity = "\\n".join((
+            f"Marca: {product.get('marca') or 'Sin marca'}",
+            f"Categoría: {product.get('categoria') or 'Sin categoría'}",
+            f"Color: {product.get('color') or 'Sin color'}",
+            f"Código: {product.get('codigo') or 'Sin código'}",
+        ))
+        self.identity.setText(identity)
+        self.identity.show()
+        self.setToolTip(f"{value}\\n{identity}\\n{detail}")
 
 
 class AnnualAnalyticsPanel(QWidget):
@@ -175,9 +200,10 @@ class AnnualAnalyticsPanel(QWidget):
         self.units.update_contents(
             product["nombre"] if product else "Sin ventas",
             (
-                f"{product['unidades']:g} unidades · {product['categoria']}"
+                f"{product['unidades']:g} unidades vendidas"
                 if product else "Sin datos en el año"
             ),
+            product=product,
         )
         most_profitable = summary["producto_mas_rentable"]
         self.profit.update_contents(
@@ -186,6 +212,7 @@ class AnnualAnalyticsPanel(QWidget):
                 f"Utilidad anual: {_money(most_profitable['utilidad'])}"
                 if most_profitable else "Sin datos en el año"
             ),
+            product=most_profitable,
         )
         slowest = summary["producto_menos_vendido"]
         self.slowest.update_contents(
@@ -195,6 +222,7 @@ class AnnualAnalyticsPanel(QWidget):
                 f"{slowest['dias']} días en inventario"
                 if slowest else "Ningún producto con 90 días en inventario"
             ),
+            product=slowest,
         )
 
         self.stagnant.setRowCount(0)
@@ -302,6 +330,11 @@ class AnnualAnalyticsPanel(QWidget):
             }}
             QLabel#analyticsSubtitle {{
                 font-size: 12px; color: {colors['card_subtitle']};
+                background: transparent; border: none;
+            }}
+            QLabel#analyticsIdentity {{
+                font-size: 12px;
+                color: {colors['card_subtitle']};
                 background: transparent; border: none;
             }}
             QLabel#analyticsIcon {{
