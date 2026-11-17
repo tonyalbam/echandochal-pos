@@ -6,10 +6,10 @@ on:
       version:
         description: Versión del candidato
         required: true
-        default: 1.0.0
+        default: 1.1.0
   push:
     branches:
-      - release/1.0.0
+      - release/1.1.0
 
 jobs:
   build:
@@ -47,16 +47,26 @@ jobs:
         run: |
           $Version = "${{ github.event.inputs.version }}"
           if ([string]::IsNullOrWhiteSpace($Version)) {
-            $Version = "1.0.0"
+            $Version = "1.1.0"
           }
           .\build_windows.ps1 -Version $Version -RequireInstaller
 
-      - name: Publicar instalador final v1.0.0
+      - name: Preparar instrucciones y huella digital
+        shell: pwsh
+        run: |
+          Copy-Item RELEASE_1.1.0.md release\INSTRUCCIONES_ACTUALIZACION.md
+          $Setup = Get-Item release\EchandoChalPOS-Setup-1.1.0.exe
+          $Hash = (Get-FileHash -Algorithm SHA256 $Setup.FullName).Hash.ToLowerInvariant()
+          "$Hash  $($Setup.Name)" | Set-Content release\SHA256SUMS.txt -Encoding ascii
+
+      - name: Publicar paquete de actualización v1.1.0
         uses: actions/upload-artifact@v4
         with:
-          name: EchandoChalPOS-v1.0.0-Windows
+          name: EchandoChalPOS-v1.1.0-Windows
           path: |
             release\EchandoChalPOS-Setup-*.exe
             release\EchandoChalPOS-Portable-*.zip
+            release\INSTRUCCIONES_ACTUALIZACION.md
+            release\SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14

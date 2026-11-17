@@ -74,21 +74,34 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   LegacyDatabase: String;
   LegacyDataDir: String;
+  ExternalConfig: String;
 begin
   Result := '';
   LegacyDataDir := ExpandConstant('{app}\data');
   LegacyDatabase := LegacyDataDir + '\echandochal.db';
+
+#ifdef SandboxBuild
+  ExternalConfig := ExpandConstant('{localappdata}\EchandoChalPOS-Sandbox\data-location.json');
+#else
+  ExternalConfig := ExpandConstant('{localappdata}\EchandoChalPOS\data-location.json');
+#endif
 
   if FileExists(LegacyDatabase) or
      FileExists(LegacyDatabase + '-wal') or
      FileExists(LegacyDatabase + '-shm') or
      DirExists(ExpandConstant('{app}\backups')) then
   begin
-    Result :=
-      'Se detectaron datos o respaldos de una instalación anterior ' +
-      'dentro de la carpeta del programa.' + #13#10 + #13#10 +
-      'Por seguridad, la instalación se ha detenido sin modificar esos archivos.' + #13#10 + #13#10 +
-      'Primero migre la base de datos a una carpeta externa y confirme ' +
-      'que tiene un respaldo válido. Después vuelva a ejecutar el instalador.';
+    // Solo se permite sobreescribir el ejecutable si ya se configuró
+    // una ubicación externa. La base antigua no se elimina ni se mueve.
+    if not FileExists(ExternalConfig) then
+    begin
+      Result :=
+        'Se detectaron datos o respaldos de una instalación anterior ' +
+        'dentro de la carpeta del programa.' + #13#10 + #13#10 +
+        'Por seguridad, la instalación se ha detenido sin modificar esos archivos.' + #13#10 + #13#10 +
+        'Cree un respaldo y migre la base a una carpeta externa mediante ' +
+        'el asistente de la versión portable. No borre la base anterior.' + #13#10 + #13#10 +
+        'Después de verificar la migración, vuelva a ejecutar el instalador.';
+    end;
   end;
 end;

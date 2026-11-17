@@ -106,6 +106,30 @@ class PackagingTest(unittest.TestCase):
         self.assertIn("DirExists(ExpandConstant('{app}\\backups'))", installer)
         self.assertIn("la instalación se ha detenido", installer)
 
+    def test_upgrade_accepts_legacy_files_only_with_external_config(self) -> None:
+        installer = Path("installer/echandochal_pos.iss").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            r"{localappdata}\\EchandoChalPOS\\data-location.json",
+            installer,
+        )
+        self.assertIn("if not FileExists(ExternalConfig) then", installer)
+        self.assertIn("No borre la base anterior", installer)
+        self.assertNotIn("[UninstallDelete]", installer)
+        self.assertNotIn("[InstallDelete]", installer)
+        self.assertIn("AppId={{73C9AB99-2794-4384-BCA5-D2EEB61E63EF}", installer)
+
+    def test_1_1_release_build_includes_installer_and_instructions(self) -> None:
+        workflow = Path(".github/workflows/build-windows.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("release/1.1.0", workflow)
+        self.assertIn("default: 1.1.0", workflow)
+        self.assertIn("EchandoChalPOS-Setup-1.1.0.exe", workflow)
+        self.assertIn("SHA256SUMS.txt", workflow)
+        self.assertIn("INSTRUCCIONES_ACTUALIZACION.md", workflow)
+
     def test_sandbox_installer_is_isolated_and_does_not_autolaunch(self) -> None:
         installer = Path("installer/echandochal_pos.iss").read_text(encoding="utf-8")
         self.assertIn("#ifdef SandboxBuild", installer)
