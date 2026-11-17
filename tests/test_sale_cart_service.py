@@ -2,6 +2,7 @@ import unittest
 
 from app.services.sale_cart_service import (
     adjusted_sale_quantity,
+    set_sale_quantity,
     calculate_discount,
     expand_sale_items,
     group_sale_items,
@@ -93,6 +94,39 @@ class SaleCartServiceTest(unittest.TestCase):
             with self.subTest(change=change):
                 with self.assertRaises(ValueError):
                     adjusted_sale_quantity(items, 0, change, 5)
+
+
+    def test_absolute_quantity_sets_total_not_a_delta(self):
+        items = [{"producto_id": 1, "cantidad": 2}]
+        self.assertEqual(set_sale_quantity(items, 0, 5, 5), 5)
+        self.assertEqual(set_sale_quantity(items, 0, 1, 5), 1)
+        self.assertEqual(set_sale_quantity(items, 0, 0, 5), 0)
+        self.assertEqual(set_sale_quantity(items, 0, 2, 5), 2)
+        self.assertEqual(items[0]["cantidad"], 2)
+
+    def test_absolute_quantity_counts_same_product_other_rows(self):
+        items = [
+            {"producto_id": 1, "cantidad": 1},
+            {"producto_id": 1, "cantidad": 2},
+            {"producto_id": 2, "cantidad": 50},
+        ]
+        self.assertEqual(set_sale_quantity(items, 0, 3, 5), 3)
+        with self.assertRaisesRegex(ValueError, "Inventario insuficiente"):
+            set_sale_quantity(items, 0, 4, 5)
+
+    def test_absolute_quantity_allows_decrease_when_stock_dropped(self):
+        items = [
+            {"producto_id": 1, "cantidad": 4},
+            {"producto_id": 1, "cantidad": 4},
+        ]
+        self.assertEqual(set_sale_quantity(items, 0, 2, 5), 2)
+        self.assertEqual(set_sale_quantity(items, 0, 0, 5), 0)
+
+    def test_absolute_quantity_rejects_decimals_and_negative(self):
+        items = [{"producto_id": 1, "cantidad": 1}]
+        for value in (1.5, -1, True, 1000000, None, "2"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                set_sale_quantity(items, 0, value, 5)
 
 
 if __name__ == "__main__":

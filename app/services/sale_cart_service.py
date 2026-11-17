@@ -97,3 +97,48 @@ def adjusted_sale_quantity(
             )
 
     return max(0.0, new_quantity)
+
+def set_sale_quantity(
+    items: list[dict],
+    row: int,
+    quantity: int,
+    inventory: float,
+) -> int:
+    """Valida la cantidad FINAL del renglón, incluyendo unidades de otras filas.
+
+    No modifica el carrito. Cero indica que se eliminará este renglón.
+    """
+    from math import isfinite
+
+    if not 0 <= row < len(items):
+        raise ValueError("Selecciona un producto de la venta.")
+    if isinstance(quantity, bool) or not isinstance(quantity, int):
+        raise ValueError("La cantidad debe ser un número entero.")
+    if quantity < 0:
+        raise ValueError("La cantidad no puede ser negativa.")
+    if quantity > 999999:
+        raise ValueError("La cantidad máxima permitida es 999999.")
+
+    inventory = float(inventory)
+    if not isfinite(inventory):
+        raise ValueError("No se pudo determinar la existencia actual.")
+
+    product_id = int(items[row]["producto_id"])
+    other_quantity = sum(
+        float(item["cantidad"])
+        for index, item in enumerate(items)
+        if index != row and int(item["producto_id"]) == product_id
+    )
+    total_quantity = other_quantity + quantity
+    # Reducir o eliminar siempre ayuda a corregir un carrito desactualizado.
+    current = float(items[row]["cantidad"])
+    if quantity > current and total_quantity > inventory + 0.0000001:
+        max_for_row = max(0, int(inventory - other_quantity))
+        raise ValueError(
+            "Inventario insuficiente. "
+            f"Puedes dejar hasta {max_for_row} piezas en este renglón. "
+            f"Existencia total: {inventory:g}; "
+            f"reservadas en otras filas: {other_quantity:g}."
+        )
+
+    return quantity
