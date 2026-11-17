@@ -527,9 +527,9 @@ class ProductDialog(QDialog):
                     self,
                     "Producto duplicado",
                     "Ya existe un producto con el mismo Nombre, Categoría, "
-                    "Marca, Color y Unidad.\\n\\n"
-                    f"Producto: {duplicate['nombre']}\\n"
-                    f"Código: {duplicate['codigo']}{status}\\n\\n"
+                    "Marca, Color y Unidad.\n\n"
+                    f"Producto: {duplicate['nombre']}\n"
+                    f"Código: {duplicate['codigo']}{status}\n\n"
                     "No se puede registrar nuevamente. "
                     "Revisa los datos o utiliza el producto existente.",
                 )
