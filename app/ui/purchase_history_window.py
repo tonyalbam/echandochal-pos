@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.purchase_service import PurchaseService
 from app.ui.widgets.column_sort import next_sort, sort_records, SortableItem
+from app.ui.widgets.date_filter import add_calendar_button
 
 
 class PurchaseDetailDialog(QDialog):
@@ -135,16 +136,22 @@ class PurchaseHistoryWindow(QWidget):
         self.date_from.setCalendarPopup(True)
         self.date_from.setDisplayFormat("yyyy-MM-dd")
         self.date_from.setDate(QDate(datetime.now().year, 1, 1))
-        self.date_from.dateChanged.connect(self._load_purchases)
+        self.date_from.dateChanged.connect(self._on_date_selected)
         period_layout.addWidget(self.date_from)
+        self.calendar_from = add_calendar_button(
+            period_layout, self.date_from, self
+        )
 
         period_layout.addWidget(QLabel("Hasta:"))
         self.date_to = QDateEdit()
         self.date_to.setCalendarPopup(True)
         self.date_to.setDisplayFormat("yyyy-MM-dd")
         self.date_to.setDate(QDate.currentDate())
-        self.date_to.dateChanged.connect(self._load_purchases)
+        self.date_to.dateChanged.connect(self._on_date_selected)
         period_layout.addWidget(self.date_to)
+        self.calendar_to = add_calendar_button(
+            period_layout, self.date_to, self
+        )
         period_layout.addStretch()
         layout.addLayout(period_layout)
 
@@ -208,10 +215,15 @@ class PurchaseHistoryWindow(QWidget):
             self.date_to.date().toString("yyyy-MM-dd"),
         )
 
+    def _on_date_selected(self, _date=None) -> None:
+        """Activar el periodo al seleccionar o escribir una fecha."""
+        if not self.filter_dates.isChecked():
+            self.filter_dates.setChecked(True)
+        elif hasattr(self, "table"):
+            self._load_purchases()
+
     def _update_date_filter(self) -> None:
-        enabled = self.filter_dates.isChecked()
-        self.date_from.setEnabled(enabled)
-        self.date_to.setEnabled(enabled)
+        # Al desactivar el filtro los campos NO se deshabilitan.
         if hasattr(self, "table"):
             self._load_purchases()
 
