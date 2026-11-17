@@ -349,6 +349,7 @@ class DashboardService:
                       dv.subtotal, dv.costo_unitario,
                       p.nombre, p.codigo,
                       COALESCE(NULLIF(TRIM(p.marca), ''), 'Sin marca') AS marca,
+                      COALESCE(NULLIF(TRIM(p.color), ''), 'Sin color') AS color,
                       COALESCE(c.nombre, 'Sin categoría') AS categoria
                FROM detalle_venta dv
                JOIN ventas v ON v.id = dv.venta_id
@@ -379,6 +380,7 @@ class DashboardService:
                 products[product_id] = {
                     "id": product_id, "codigo": line["codigo"],
                     "nombre": line["nombre"], "categoria": line["categoria"],
+                    "marca": line["marca"], "color": line["color"],
                     "unidades": 0.0, "ventas": 0.0, "utilidad": 0.0,
                 }
             entry = products[product_id]
