@@ -49,6 +49,9 @@ class AnnualAnalyticsTests(unittest.TestCase):
                  "2026-10-25"),
             ],
         )
+        cursor.execute("UPDATE productos SET color = 'Azul rey' WHERE codigo = 'A'")
+        cursor.execute("UPDATE productos SET color = 'Rojo vino' WHERE codigo = 'B'")
+        cursor.execute("UPDATE productos SET color = '' WHERE codigo = 'C'")
         cursor.execute(
             """INSERT INTO ventas(
                    folio, fecha, hora, subtotal, total, metodo_pago,
@@ -120,6 +123,22 @@ class AnnualAnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(leaders[1]["ventas"], 90)
         self.assertAlmostEqual(sum(item["ventas"] for item in leaders), 420)
         self.assertAlmostEqual(sum(item["porcentaje"] for item in leaders), 100)
+
+    def test_revenue_legend_includes_full_product_identifiers(self):
+        result = self.service.get_analytics_annual(2026, date(2026, 11, 2))
+        leaders = result["top_productos_ingresos"]
+        self.assertEqual(
+            [(item["nombre"], item["marca"], item["categoria"],
+              item["color"], item["codigo"]) for item in leaders],
+            [
+                ("Lana azul", "Marca Uno", "Ejemplo", "Azul rey", "A"),
+                ("Lana roja", "Marca Dos", "Ejemplo", "Rojo vino", "B"),
+            ],
+        )
+        # Esta modificación es exclusivamente descriptiva; no debe
+        # alterar el ranking ni los importes anuales.
+        self.assertEqual([item["ventas"] for item in leaders], [330, 90])
+        self.assertEqual([item["unidades"] for item in leaders], [4, 1])
 
     def test_monthly_cumulative_uses_existing_profit_rules(self):
         result = self.service.get_analytics_annual(2026, date(2026, 11, 2))
