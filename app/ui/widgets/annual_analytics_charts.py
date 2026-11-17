@@ -121,10 +121,11 @@ class CumulativeProfitChart(QWidget):
 class RevenueDonutChart(QWidget):
     """Dona y leyenda de los cinco productos con mayores ventas en pesos."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_legend: bool = True):
         super().__init__(parent)
         self.products = []
         self.dark = False
+        self.show_legend = bool(show_legend)
         self.setMinimumHeight(340)
 
     def set_data(self, products):
@@ -147,9 +148,15 @@ class RevenueDonutChart(QWidget):
             p.drawText(bounds, Qt.AlignmentFlag.AlignCenter, "Sin ventas registradas")
             p.end()
             return
-        available = min(bounds.height() - 32, bounds.width() * .48)
+        if self.show_legend:
+            available = min(bounds.height() - 32, bounds.width() * .48)
+            center_x = bounds.left() + bounds.width() * .30
+        else:
+            # El panel anual dispone de una leyenda Qt amplia y sin recortes.
+            # Centrar la dona en su propia área sin duplicar etiquetas.
+            available = min(bounds.height() - 24, bounds.width() - 24)
+            center_x = bounds.center().x()
         diameter = max(48.0, available - 30)
-        center_x = bounds.left() + bounds.width() * .30
         center_y = bounds.center().y()
         circle = QRectF(center_x - diameter / 2, center_y - diameter / 2,
                         diameter, diameter)
@@ -171,6 +178,9 @@ class RevenueDonutChart(QWidget):
         font.setPointSize(13)
         p.setFont(font)
         p.drawText(circle, Qt.AlignmentFlag.AlignCenter, "100%")
+        if not self.show_legend:
+            p.end()
+            return
         legend_left = bounds.left() + bounds.width() * .60
         legend_width = max(40, bounds.right() - legend_left)
         p.setFont(QFont(self.font().family(), 9))
