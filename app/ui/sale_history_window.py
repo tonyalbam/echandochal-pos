@@ -28,6 +28,7 @@ from app.services.sale_history_service import SaleHistoryService
 from app.services.ticket_service import TicketService
 from app.ui.widgets.column_sort import next_sort, sort_value
 from app.ui.theme import theme_colors
+from app.ui.widgets.date_filter import add_calendar_button
 
 
 class SortableSaleItem(QTreeWidgetItem):
@@ -335,16 +336,22 @@ class SaleHistoryWindow(QWidget):
         self.fecha_desde.setCalendarPopup(True)
         self.fecha_desde.setDisplayFormat("yyyy-MM-dd")
         self.fecha_desde.setDate(QDate(datetime.now().year, 1, 1))
-        self.fecha_desde.dateChanged.connect(self._load_sales)
+        self.fecha_desde.dateChanged.connect(self._on_date_selected)
         periodo.addWidget(self.fecha_desde)
+        self.calendario_desde = add_calendar_button(
+            periodo, self.fecha_desde, self
+        )
 
         periodo.addWidget(QLabel("Hasta:"))
         self.fecha_hasta = QDateEdit()
         self.fecha_hasta.setCalendarPopup(True)
         self.fecha_hasta.setDisplayFormat("yyyy-MM-dd")
         self.fecha_hasta.setDate(QDate.currentDate())
-        self.fecha_hasta.dateChanged.connect(self._load_sales)
+        self.fecha_hasta.dateChanged.connect(self._on_date_selected)
         periodo.addWidget(self.fecha_hasta)
+        self.calendario_hasta = add_calendar_button(
+            periodo, self.fecha_hasta, self
+        )
         periodo.addSpacing(20)
         periodo.addWidget(QLabel("Agrupar por:"))
         self.agrupar = QComboBox()
@@ -574,11 +581,17 @@ class SaleHistoryWindow(QWidget):
             self.fecha_hasta.date().toString("yyyy-MM-dd"),
         )
 
-    def _actualizar_filtro_fechas(self) -> None:
-        enabled = self.filtrar_fechas.isChecked()
-        self.fecha_desde.setEnabled(enabled)
-        self.fecha_hasta.setEnabled(enabled)
+    def _on_date_selected(self, _date=None) -> None:
+        """Una fecha escrita o elegida activa inmediatamente el filtro."""
+        if not self.filtrar_fechas.isChecked():
+            # Cambiar la casilla ya recarga las ventas, evitando doble consulta.
+            self.filtrar_fechas.setChecked(True)
+        elif hasattr(self, "tabla"):
+            self._load_sales()
 
+    def _actualizar_filtro_fechas(self) -> None:
+        # Desmarcar la casilla desactiva sólo el filtro, no los controles.
+        # Ambos campos y calendarios deben ser siempre interactivos.
         if hasattr(self, "tabla"):
             self._load_sales()
 
