@@ -109,13 +109,10 @@ class CancelledSaleRowColorTest(unittest.TestCase):
         self.window._sort_sales(6)
         self.window.refresh()
         self._assert_red_row(self._items()["V-CANCELADA"], False)
-        self.assertEqual(self.window._items if False else
-                         self._items()["V-CANCELADA"].data(
-                             0, Qt.ItemDataRole.UserRole),
-                         self.window.sales_by_id[
-                             self._items()["V-CANCELADA"].data(
-                                 0, Qt.ItemDataRole.UserRole)
-                         ]["id"])
+        sale_id = self._items()["V-CANCELADA"].data(
+            0, Qt.ItemDataRole.UserRole
+        )
+        self.assertEqual(self.window.sales_by_id[sale_id]["folio"], "V-CANCELADA")
 
     def test_dark_mode_matches_inactive_products_danger_color(self):
         self.app.setProperty("echandochal_dark_mode", True)
