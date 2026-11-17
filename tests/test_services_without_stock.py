@@ -88,6 +88,14 @@ class ServiceCatalogAndSaleTest(unittest.TestCase):
             payment_method="Efectivo",
         )
         self.assertEqual(sale["total"], 760)
+        self.assertAlmostEqual(
+            DashboardService(self.db).get_profit_for_period(sale["fecha"]),
+            550.0,
+        )
+        summary = DashboardService(self.db).get_analytics_annual(
+            int(sale["fecha"][:4])
+        )
+        self.assertEqual(summary["producto_mas_rentable"]["categoria"], "Clases")
         product = self.catalog.get_product(self.product_id)
         service = self.catalog.get_product(self.service_id)
         self.assertEqual(product["existencia"], 2)

@@ -350,7 +350,10 @@ class DashboardService:
                       p.nombre, p.codigo,
                       COALESCE(NULLIF(TRIM(p.marca), ''), 'Sin marca') AS marca,
                       COALESCE(NULLIF(TRIM(p.color), ''), 'Sin color') AS color,
-                      COALESCE(c.nombre, 'Sin categoría') AS categoria
+                      CASE WHEN p.tipo = 'SERVICIO'
+                           THEN COALESCE(p.subtipo_servicio, 'Otros servicios')
+                           ELSE COALESCE(c.nombre, 'Sin categoría')
+                      END AS categoria
                FROM detalle_venta dv
                JOIN ventas v ON v.id = dv.venta_id
                JOIN productos p ON p.id = dv.producto_id
