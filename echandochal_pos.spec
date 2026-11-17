@@ -8,6 +8,8 @@ datas += collect_data_files("matplotlib")
 # La hora local del historial usa la base IANA, requerida en Windows.
 datas += collect_data_files("tzdata")
 hiddenimports = collect_submodules("reportlab.graphics.barcode")
+# El visor y la impresión de tickets deben estar incluidos en el ejecutable.
+hiddenimports += ["PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtPrintSupport"]
 
 a = Analysis(
     ["main.py"],

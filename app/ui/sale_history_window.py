@@ -1,4 +1,6 @@
 from datetime import datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QBrush, QColor
@@ -26,6 +28,7 @@ from PySide6.QtWidgets import (
 from app.database.connection import Database
 from app.services.sale_history_service import SaleHistoryService
 from app.services.ticket_service import TicketService
+from app.ui.ticket_preview_dialog import TicketPreviewDialog
 from app.ui.widgets.column_sort import next_sort, sort_value
 from app.ui.theme import theme_colors
 from app.ui.widgets.date_filter import add_calendar_button
@@ -432,8 +435,17 @@ class SaleHistoryWindow(QWidget):
         self.exportar.clicked.connect(self._exportar_excel)
         botones.addWidget(self.exportar)
 
+        self.ver_ticket = QPushButton("Ver ticket PDF")
+        self.ver_ticket.setMinimumSize(140, 40)
+        self.ver_ticket.setToolTip(
+            "Abre el ticket dentro de EchandoChal POS para verlo e imprimirlo."
+        )
+        self.ver_ticket.clicked.connect(self._ver_ticket_pdf)
+        botones.addWidget(self.ver_ticket)
+
         self.ticket = QPushButton("Ticket PDF")
         self.ticket.setMinimumSize(120, 40)
+        self.ticket.setToolTip("Guardar una copia del ticket en PDF.")
         self.ticket.clicked.connect(self._exportar_ticket)
         botones.addWidget(self.ticket)
 
@@ -643,11 +655,13 @@ class SaleHistoryWindow(QWidget):
         if sale is None:
             self.detalle.setEnabled(False)
             self.ticket.setEnabled(False)
+            self.ver_ticket.setEnabled(False)
             self.cancelar.setEnabled(False)
             return
 
         self.detalle.setEnabled(True)
         self.ticket.setEnabled(True)
+        self.ver_ticket.setEnabled(True)
 
         self.cancelar.setEnabled(
             not bool(sale["cancelada"])
@@ -699,6 +713,36 @@ class SaleHistoryWindow(QWidget):
         """Abre ventas; el doble clic en grupos solo expande o contrae."""
         if self._selected_sale() is not None:
             self._mostrar_detalle()
+
+    def _ver_ticket_pdf(self) -> None:
+        """Previsualiza el ticket sin exigir al usuario guardar un archivo."""
+        sale = self._selected_sale()
+        if sale is None:
+            QMessageBox.information(
+                self,
+                "Selecciona una venta",
+                "Selecciona una venta para ver su ticket.",
+            )
+            return
+
+        # El PDF existe únicamente mientras el visor está abierto.
+        # Se genera con el servicio habitual, sin alterar ventas ni inventario.
+        try:
+            with TemporaryDirectory(prefix="echandochal-ticket-") as folder:
+                pdf_path = self.ticket_service.generate_sale_ticket(
+                    sale["id"], Path(folder) / "ticket.pdf"
+                )
+                preview = TicketPreviewDialog(pdf_path, sale["folio"], self)
+                try:
+                    preview.exec()
+                finally:
+                    preview.release_document()
+        except (OSError, RuntimeError, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "No se pudo mostrar el ticket",
+                str(error),
+            )
 
     def _exportar_ticket(self) -> None:
         sale = self._selected_sale()

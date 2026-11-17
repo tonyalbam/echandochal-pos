@@ -90,6 +90,14 @@ class PackagingTest(unittest.TestCase):
         )
         self.assertIn("hiddenimports=hiddenimports", spec)
 
+    def test_pdf_preview_and_print_modules_are_packaged(self) -> None:
+        spec = Path("echandochal_pos.spec").read_text(encoding="utf-8")
+        for qt_module in (
+            "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtPrintSupport"
+        ):
+            with self.subTest(qt_module=qt_module):
+                self.assertIn(f'"{qt_module}"', spec)
+
     def test_installer_blocks_upgrade_with_legacy_operational_data(self) -> None:
         installer = Path("installer/echandochal_pos.iss").read_text(encoding="utf-8")
         self.assertIn("function PrepareToInstall(var NeedsRestart: Boolean): String;", installer)
