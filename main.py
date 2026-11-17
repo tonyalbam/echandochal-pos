@@ -9,11 +9,15 @@ from app.database.schema import create_database
 from app.services.backup_service import BackupService
 from app.ui.main_window import MainWindow
 from app.ui.theme import WindowsThemeManager
+from app.ui.checkbox_style import AccessibleCheckboxStyle
 
 
 def main() -> int:
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
+    # El estilo de casillas se mantiene activo al alternar temas de Windows.
+    checkbox_style = AccessibleCheckboxStyle(app.style())
+    app.setStyle(checkbox_style)
     theme_manager = WindowsThemeManager(app)
 
     try:
