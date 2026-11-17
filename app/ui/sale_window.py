@@ -434,6 +434,9 @@ class SaleWindow(QWidget):
         self.codigo_input.setPlaceholderText(
             "Código, código de barras, nombre o marca"
         )
+        self.codigo_input.setToolTip(
+            "Sugerencias: código | producto | marca | categoría | color | unidad"
+        )
         self.codigo_input.setMinimumHeight(38)
         self.codigo_input.returnPressed.connect(
             self._agregar_por_codigo
@@ -680,12 +683,42 @@ class SaleWindow(QWidget):
         self.suggestion_products = {}
         labels = []
         for product in products:
-            brand = f" | {product['marca']}" if product["marca"] else ""
-            label = f"{product['codigo']} | {product['nombre']}{brand}"
+            # Mantener el código como primer campo; cada opción es única
+            # y seleccionable incluso si varios productos comparten nombre.
+            label = " | ".join((
+                product["codigo"],
+                product["nombre"],
+                product.get("marca") or "Sin marca",
+                product.get("categoria") or "Sin categoría",
+                product.get("color") or "Sin color",
+                product.get("unidad") or "Sin unidad",
+            ))
             labels.append(label)
             self.suggestion_products[label] = product
         self.suggestion_model.setStringList(labels)
         if labels:
+            popup = self.completer.popup()
+            popup.setTextElideMode(Qt.TextElideMode.ElideNone)
+            popup.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+            screen = self.codigo_input.screen()
+            screen_width = (
+                screen.availableGeometry().width() if screen
+                else self.width()
+            )
+            widest_label = max(
+                popup.fontMetrics().horizontalAdvance(label)
+                for label in labels
+            )
+            # Ensanchar la lista para ver los seis atributos, sin
+            # exceder el ancho visible de la pantalla.
+            popup.setMinimumWidth(
+                max(
+                    self.codigo_input.width(),
+                    min(widest_label + 45, max(320, screen_width - 80)),
+                )
+            )
             self.completer.complete()
 
     def _agregar_sugerencia(self, label: str) -> None:

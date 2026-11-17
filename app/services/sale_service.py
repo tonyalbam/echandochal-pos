@@ -70,7 +70,7 @@ class SaleService:
             """
             SELECT
                 p.id, p.codigo, p.codigo_barras, p.codigo_qr, p.nombre,
-                p.precio, p.existencia, p.stock_minimo,
+                p.unidad, p.precio, p.existencia, p.stock_minimo,
                 COALESCE(p.marca, '') AS marca,
                 COALESCE(p.color, '') AS color,
                 COALESCE(c.nombre, '') AS categoria
