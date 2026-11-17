@@ -4,7 +4,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 from app.ui.annual_analytics_panel import AnnualAnalyticsPanel
 
 
@@ -54,6 +54,53 @@ class AnnualAnalyticsUiTest(unittest.TestCase):
         panel.apply_theme(True)
         self.app.processEvents()
         panel.performance_chart.repaint()
+        panel.close()
+
+    def test_donut_legend_displays_all_five_identifiers_and_full_names(self):
+        panel = AnnualAnalyticsPanel()
+        products = [
+            {
+                "nombre": f"Estambre multicolor especial {index} con nombre largo",
+                "marca": f"Marca artesanal {index}",
+                "categoria": "Algodón combinado de alta calidad",
+                "color": f"Azul y amarillo {index}",
+                "codigo": f"ECH{index:07d}",
+                "ventas": 500 - index * 60,
+            }
+            for index in range(1, 6)
+        ]
+        panel._render_revenue_pie(products)
+        panel.show()
+        self.app.processEvents()
+        self.assertFalse(panel.pie_chart.show_legend)
+        self.assertEqual(panel.pie_legend_layout.count(), 5)
+        self.assertEqual(len(panel.pie_chart.products), 5)
+
+        for index, product in enumerate(products):
+            row = panel.pie_legend_layout.itemAt(index).widget()
+            self.assertEqual(row.property("product_code"), product["codigo"])
+            labels = row.findChildren(QLabel)
+            texts = [label.text() for label in labels]
+            joined = "\\n".join(texts)
+            self.assertIn(product["nombre"], joined)
+            self.assertIn(f"Marca: {product['marca']}", joined)
+            self.assertIn(f"Categoría: {product['categoria']}", joined)
+            self.assertIn(f"Color: {product['color']}", joined)
+            self.assertIn(f"Código: {product['codigo']}", joined)
+            self.assertIn("Ventas: $", joined)
+            self.assertTrue(all(label.wordWrap() for label in labels[1:]))
+
+        # Cambiar de año o de filtro debe reemplazar, no duplicar la leyenda.
+        panel._render_revenue_pie(products[:2])
+        self.assertEqual(panel.pie_legend_layout.count(), 2)
+        panel._render_revenue_pie([])
+        self.assertEqual(len(panel.pie_chart.products), 0)
+        self.assertIn(
+            "Sin productos", panel.pie_legend_layout.itemAt(0).widget().text()
+        )
+        panel.apply_theme(True)
+        panel.apply_theme(False)
+        panel.pie_chart.repaint()
         panel.close()
 
     def test_populated_charts_render_in_both_themes(self):
