@@ -5,6 +5,7 @@ debe mantenerlos durante toda la vida de la ventana.
 """
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QRectF, QSize, QSizeF
 from PySide6.QtGui import QPageSize, QPainter
@@ -148,3 +149,36 @@ def print_pdf_document(document: QPdfDocument, printer: QPrinter) -> None:
 
     if not painter.end():
         raise RuntimeError("La impresora no pudo finalizar el documento.")
+
+def print_sale_ticket_to_printer(ticket_service, sale_id: int, printer: QPrinter) -> None:
+    """Genera y manda un ticket a la impresora sin solicitar guardarlo.
+
+    PDFium recibe un búfer en memoria. Así no retiene bloqueos de archivos
+    temporales en Windows, incluso si la impresión falla.
+    """
+    with TemporaryDirectory(prefix="echandochal-print-") as directory:
+        path = ticket_service.generate_sale_ticket(
+            sale_id, Path(directory) / "recibo.pdf"
+        )
+        pdf_data = QByteArray(Path(path).read_bytes())
+        buffer = QBuffer()
+        buffer.setData(pdf_data)
+        if not buffer.open(QIODevice.OpenModeFlag.ReadOnly):
+            raise OSError("No se pudo preparar el PDF para imprimir.")
+
+        document = QPdfDocument()
+        try:
+            document.load(buffer)
+            if document.pageCount() < 1:
+                raise ValueError("No se pudo abrir el ticket para imprimir.")
+
+            size = document.pagePointSize(0)
+            if size.isValid():
+                printer.setPageSize(
+                    QPageSize(QSizeF(size), QPageSize.Unit.Point)
+                )
+            print_pdf_document(document, printer)
+        finally:
+            document.close()
+            buffer.close()
+

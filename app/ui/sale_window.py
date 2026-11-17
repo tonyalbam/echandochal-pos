@@ -1,5 +1,6 @@
 from PySide6.QtCore import QTimer, Signal, QStringListModel, Qt, QRegularExpression
 from PySide6.QtGui import QIntValidator, QRegularExpressionValidator
+from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QCompleter,
@@ -29,6 +30,8 @@ from app.services.sale_cart_service import (
 )
 from app.services.sale_service import SaleService
 from app.services.ticket_service import TicketService
+from app.ui.sale_receipt_prompt import SaleReceiptPrompt
+from app.ui.ticket_preview_dialog import print_sale_ticket_to_printer
 
 
 SALE_QUANTITY_HELP = (
@@ -1050,34 +1053,47 @@ class SaleWindow(QWidget):
 
             return
 
-        mensaje = (
-            "Venta registrada correctamente.\n\n"
-            f"Folio: {venta['folio']}\n"
-            f"Total: $ {venta['total']:,.2f}\n"
-            "Forma de pago: "
-            f"{venta['metodo_pago']}\n"
-        )
-
-        mensaje += f"Cambio para el cliente: $ {venta['change']:,.2f}\n"
-
-        if venta["monto_comision"] > 0:
-            mensaje += (
-                f"Comisión: "
-                f"$ {venta['monto_comision']:,.2f}\n"
-                f"Neto: "
-                f"$ {venta['total_neto']:,.2f}"
-            )
-
-        QMessageBox.information(
-            self,
-            "Venta registrada",
-            mensaje,
-        )
-
+        # La venta ya está registrada: ninguna decisión posterior debe
+        # repetir el cobro ni revertir el inventario.
         self.last_sale_id = int(venta["id"])
         self.ticket_button.setEnabled(True)
-
         self._limpiar_venta()
+
+        # Una sola ventana, sin mensaje adicional, para seguir cobrando rápido.
+        prompt = SaleReceiptPrompt(venta, self)
+        if prompt.exec() == QDialog.DialogCode.Accepted:
+            self._imprimir_ultimo_ticket()
+
+    def _imprimir_ultimo_ticket(self) -> None:
+        """Envía el recibo a la impresora predeterminada de Windows."""
+        if self.last_sale_id is None:
+            return
+
+        printer_info = QPrinterInfo.defaultPrinter()
+        if printer_info.isNull():
+            QMessageBox.warning(
+                self,
+                "Impresora no configurada",
+                "La venta quedó registrada, pero no hay una impresora "
+                "predeterminada configurada en Windows. "
+                "Puedes imprimir el ticket desde Historial de ventas.",
+            )
+            return
+
+        printer = QPrinter(printer_info, QPrinter.PrinterMode.HighResolution)
+        printer.setDocName(f"EchandoChal - Venta {self.last_sale_id}")
+        try:
+            print_sale_ticket_to_printer(
+                self.ticket_service, self.last_sale_id, printer
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            QMessageBox.warning(
+                self,
+                "No se pudo imprimir",
+                "La venta quedó registrada correctamente. "
+                f"No fue posible imprimir el recibo:\n{error}\n\n"
+                "Puedes imprimirlo nuevamente desde Historial de ventas.",
+            )
 
     def _guardar_ultimo_ticket(self) -> None:
         if self.last_sale_id is None:
