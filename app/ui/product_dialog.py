@@ -1,10 +1,13 @@
 from typing import Optional
 
+from PySide6.QtCore import QRegularExpression, Qt
+from PySide6.QtGui import QRegularExpressionValidator
+
 from PySide6.QtWidgets import (
     QComboBox,
+    QCompleter,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLineEdit,
     QHBoxLayout,
@@ -17,6 +20,62 @@ from PySide6.QtWidgets import (
 )
 
 from app.services.product_service import ProductService
+
+
+class ProductNumericInput(QLineEdit):
+    """Cantidad o precio editable sin flechas ni restauración de valores.
+
+    Un campo vacío significa cero al guardar, pero permanece visualmente
+    vacío después de Backspace y de perder el foco.
+    """
+
+    def __init__(self, decimals: int, currency: bool = False) -> None:
+        super().__init__()
+        self.decimals = decimals
+        self.clear_on_focus = True
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setValidator(QRegularExpressionValidator(
+            QRegularExpression(
+                rf"[0-9]{{0,9}}(?:\.[0-9]{{0,{decimals}}})?"
+            ),
+            self,
+        ))
+        self.setPlaceholderText("0.00" if currency else "0")
+        self.currency_prefix = QLabel("$", self) if currency else None
+        if self.currency_prefix is not None:
+            self.currency_prefix.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents
+            )
+            self.currency_prefix.setStyleSheet(
+                "background: transparent; border: none; padding: 0;"
+            )
+            self.setTextMargins(22, 0, 6, 0)
+        self.setToolTip(
+            ("Importe en pesos" if currency else "Cantidad")
+            + f"; hasta {decimals} decimales. Vacío equivale a cero."
+        )
+        self.setMinimumHeight(32)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.currency_prefix is not None:
+            self.currency_prefix.setGeometry(7, 0, 13, self.height())
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if self.clear_on_focus:
+            self.clear()
+        else:
+            # En edición conserva el dato si el usuario sólo pasa por él.
+            self.selectAll()
+
+    def value(self) -> float:
+        text = self.text().strip()
+        return float(text) if text else 0.0
+
+    def setValue(self, value: float) -> None:
+        number = float(value or 0)
+        self.setText(f"{number:.{self.decimals}f}")
 
 
 class CatalogManagerDialog(QDialog):
@@ -140,6 +199,28 @@ class ProductDialog(QDialog):
 
         self._create_widgets()
         self._load_catalogs()
+        if product:
+            for field in (
+                self.costo, self.precio, self.existencia, self.stock_minimo
+            ):
+                field.clear_on_focus = False
+        else:
+            self.nombre.editingFinished.connect(self._fill_from_matching_name)
+            # Sugerencias del catálogo, pero solo la coincidencia exacta
+            # rellena los demás campos al terminar la captura del nombre.
+            product_names = sorted(
+                {p["nombre"] for p in self.product_service.list_products()},
+                key=str.casefold,
+            )
+            self.name_completer = QCompleter(product_names, self.nombre)
+            self.name_completer.setCaseSensitivity(
+                Qt.CaseSensitivity.CaseInsensitive
+            )
+            self.name_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+            self.nombre.setCompleter(self.name_completer)
+            self.name_completer.activated.connect(
+                self._fill_from_matching_name
+            )
         if not product:
             self.unidad.setCurrentText("pieza")
 
@@ -169,6 +250,11 @@ class ProductDialog(QDialog):
         self.codigo_qr.setPlaceholderText("Escanea el código QR existente aquí")
 
         self.nombre = QLineEdit()
+        self.nombre.setPlaceholderText("Nombre del producto")
+        self._filled_source_id: int | None = None
+        self._last_checked_name = ""
+        self.prefill_hint = QLabel("")
+        self.prefill_hint.setWordWrap(True)
         self.codigo_barras.returnPressed.connect(self.codigo_qr.setFocus)
         self.codigo_qr.returnPressed.connect(self.nombre.setFocus)
 
@@ -194,6 +280,7 @@ class ProductDialog(QDialog):
         form.addRow("Código de barras:", self.codigo_barras)
         form.addRow("Código QR:", self.codigo_qr)
         form.addRow("Nombre:", self.nombre)
+        form.addRow("", self.prefill_hint)
         category_row = QHBoxLayout()
         category_row.addWidget(self.categoria, 1)
         manage_categories = QPushButton("Administrar...")
@@ -227,23 +314,71 @@ class ProductDialog(QDialog):
         layout.addWidget(buttons)
 
     @staticmethod
-    def _create_money_spinbox() -> QDoubleSpinBox:
-        widget = QDoubleSpinBox()
-        widget.setDecimals(2)
-        widget.setMaximum(999999999.99)
-        widget.setMinimum(0)
-        widget.setSingleStep(1)
-        widget.setPrefix("$ ")
-        return widget
+    def _create_money_spinbox() -> ProductNumericInput:
+        return ProductNumericInput(decimals=2, currency=True)
 
     @staticmethod
-    def _create_quantity_spinbox() -> QDoubleSpinBox:
-        widget = QDoubleSpinBox()
-        widget.setDecimals(3)
-        widget.setMaximum(999999999.999)
-        widget.setMinimum(0)
-        widget.setSingleStep(1)
-        return widget
+    def _create_quantity_spinbox() -> ProductNumericInput:
+        return ProductNumericInput(decimals=3)
+
+    def _fill_from_matching_name(self, _selection: str = "") -> None:
+        """Sugiere campos de un producto homónimo sin modificar el original."""
+        if self.product is not None:
+            return
+
+        name = self.nombre.text().strip()
+        normalized = " ".join(name.split()).casefold()
+        if not normalized or normalized == self._last_checked_name:
+            return
+        self._last_checked_name = normalized
+
+        existing = self.product_service.find_existing_by_name(name)
+        if existing is None:
+            self.prefill_hint.clear()
+            self._filled_source_id = None
+            return
+
+        self._filled_source_id = int(existing["id"])
+        unavailable = []
+
+        category_id = existing.get("categoria_id")
+        index = self.categoria.findData(category_id)
+        if index >= 0:
+            self.categoria.setCurrentIndex(index)
+        else:
+            unavailable.append("categoría")
+
+        unit = existing.get("unidad") or ""
+        index = self.unidad.findText(unit)
+        if index >= 0:
+            self.unidad.setCurrentIndex(index)
+        else:
+            unavailable.append("unidad")
+
+        self.marca.setText(existing.get("marca") or "")
+        self.costo.setValue(existing.get("costo") or 0)
+        self.precio.setValue(existing.get("precio") or 0)
+        self.stock_minimo.setValue(existing.get("stock_minimo") or 0)
+
+        supplier_id = existing.get("proveedor_id")
+        index = self.proveedor.findData(supplier_id)
+        if index >= 0:
+            self.proveedor.setCurrentIndex(index)
+        else:
+            unavailable.append("proveedor")
+
+        # No copiar código interno, códigos de barras/QR, color o existencia.
+        # Cada nuevo artículo debe conservar su propia identidad y stock.
+        message = (
+            f"Datos sugeridos de {existing['codigo']}. "
+            "Puedes modificar cualquiera de los campos antes de guardar."
+        )
+        if unavailable:
+            message += (
+                " Revisa " + ", ".join(unavailable)
+                + ": la opción del producto original ya no está disponible."
+            )
+        self.prefill_hint.setText(message)
 
     def _manage_categories(self) -> None:
         original_id = self.categoria.currentData()

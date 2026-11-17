@@ -151,6 +151,29 @@ class ProductService:
 
         return dict(row) if row else None
 
+    def find_existing_by_name(self, name: str) -> Optional[dict]:
+        """Busca un producto activo con el mismo nombre, sin crear ni editar.
+
+        La comparación ignora mayúsculas, acentos en mayúsculas y espacios
+        redundantes. Si hay varios, toma el registro activo más reciente.
+        """
+        normalized = " ".join(name.split()).casefold()
+        if not normalized:
+            return None
+
+        cursor = self.database.cursor()
+        cursor.execute(
+            """
+            SELECT id, nombre FROM productos
+            WHERE activo = 1 AND eliminado = 0
+            ORDER BY id DESC
+            """
+        )
+        for row in cursor.fetchall():
+            if " ".join(row["nombre"].split()).casefold() == normalized:
+                return self.get_product(int(row["id"]))
+        return None
+
     def get_next_internal_code(self) -> str:
         """Devuelve el siguiente código ECH disponible para un producto nuevo."""
 
