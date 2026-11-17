@@ -449,11 +449,15 @@ class DashboardService:
         aged.sort(key=lambda row: (-row["dias_sin_venta"], row["nombre"]))
         # Menor rotación: priorizar cero ventas anuales y después antigüedad.
         cursor.execute(
-            """SELECT p.id, p.nombre, p.fecha_creacion,
+            """SELECT p.id, p.nombre, p.codigo, p.fecha_creacion,
+                      COALESCE(NULLIF(TRIM(p.marca), ''), 'Sin marca') AS marca,
+                      COALESCE(NULLIF(TRIM(p.color), ''), 'Sin color') AS color,
+                      COALESCE(c.nombre, 'Sin categoría') AS categoria,
                       COALESCE(SUM(CASE WHEN v.cancelada = 0
                           AND v.fecha LIKE ? THEN dv.cantidad ELSE 0 END), 0)
                           AS unidades_anuales
                FROM productos p
+               LEFT JOIN categorias c ON c.id = p.categoria_id
                LEFT JOIN detalle_venta dv ON dv.producto_id = p.id
                LEFT JOIN ventas v ON v.id = dv.venta_id
                WHERE p.activo = 1 AND p.eliminado = 0 AND p.existencia > 0
@@ -463,6 +467,8 @@ class DashboardService:
         inventory = [
             {
                 "id": int(row["id"]), "nombre": row["nombre"],
+                "codigo": row["codigo"], "marca": row["marca"],
+                "categoria": row["categoria"], "color": row["color"],
                 "unidades": float(row["unidades_anuales"]),
                 "dias": (today - date.fromisoformat(row["fecha_creacion"][:10])).days,
             }
