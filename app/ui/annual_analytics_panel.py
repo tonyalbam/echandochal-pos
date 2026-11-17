@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView,
 )
 from app.ui.widgets.annual_analytics_charts import (
-    CumulativeProfitChart, RevenueDonutChart,
+    CumulativeProfitChart, RevenueDonutChart, SEGMENT_COLORS,
 )
 from app.ui.theme import theme_colors
 from app.ui.widgets.column_sort import SortableItem, install_table_sort, restore_table_sort
@@ -82,7 +82,8 @@ class AnnualAnalyticsPanel(QWidget):
             indicators.addWidget(card, 0, index)
         outer.addLayout(indicators)
 
-        charts = QHBoxLayout()
+        # Ancho completo para identificar productos sin truncar sus datos.
+        charts = QVBoxLayout()
         charts.setSpacing(14)
         self.performance_frame = QFrame()
         self.performance_frame.setObjectName("analyticsPanel")
@@ -93,7 +94,7 @@ class AnnualAnalyticsPanel(QWidget):
         self.performance_chart = CumulativeProfitChart()
         self.performance_chart.setMinimumHeight(340)
         performance_layout.addWidget(self.performance_chart)
-        charts.addWidget(self.performance_frame, 3)
+        charts.addWidget(self.performance_frame)
 
         self.pie_frame = QFrame()
         self.pie_frame.setObjectName("analyticsPanel")
@@ -101,10 +102,21 @@ class AnnualAnalyticsPanel(QWidget):
         pie_layout.addWidget(self._heading(
             "Top 5 productos por monto de ventas"
         ))
-        self.pie_chart = RevenueDonutChart()
+        pie_contents = QHBoxLayout()
+        pie_contents.setSpacing(16)
+        self.pie_chart = RevenueDonutChart(show_legend=False)
+        self.pie_chart.setObjectName("analyticsRevenueDonut")
+        self.pie_chart.setFixedWidth(320)
         self.pie_chart.setMinimumHeight(340)
-        pie_layout.addWidget(self.pie_chart)
-        charts.addWidget(self.pie_frame, 2)
+        pie_contents.addWidget(self.pie_chart)
+        self.pie_legend = QWidget()
+        self.pie_legend.setObjectName("analyticsRevenueLegend")
+        self.pie_legend_layout = QVBoxLayout(self.pie_legend)
+        self.pie_legend_layout.setContentsMargins(0, 0, 0, 0)
+        self.pie_legend_layout.setSpacing(6)
+        pie_contents.addWidget(self.pie_legend, 1)
+        pie_layout.addLayout(pie_contents)
+        charts.addWidget(self.pie_frame)
         outer.addLayout(charts)
 
         inventory_frame = QFrame()
@@ -213,7 +225,57 @@ class AnnualAnalyticsPanel(QWidget):
         self.performance_chart.set_data(months)
 
     def _render_revenue_pie(self, products: list[dict]) -> None:
+        """Leyenda completa que comparte los colores del gráfico circular."""
         self.pie_chart.set_data(products)
+        while self.pie_legend_layout.count():
+            previous = self.pie_legend_layout.takeAt(0)
+            if previous.widget():
+                previous.widget().deleteLater()
+
+        visible = self.pie_chart.products
+        if not visible:
+            empty = QLabel("Sin productos vendidos en el periodo.")
+            empty.setObjectName("analyticsLegendMeta")
+            self.pie_legend_layout.addWidget(empty)
+            return
+
+        total = sum(float(item["ventas"]) for item in visible)
+        for index, product in enumerate(visible):
+            code = str(product.get("codigo") or "Sin código")
+            name = str(product.get("nombre") or "Sin nombre")
+            brand = str(product.get("marca") or "Sin marca")
+            category = str(product.get("categoria") or "Sin categoría")
+            color = str(product.get("color") or "Sin color")
+            row = QFrame()
+            row.setObjectName("analyticsLegendRow")
+            row.setProperty("product_code", code)
+            horizontal = QHBoxLayout(row)
+            horizontal.setContentsMargins(10, 6, 10, 6)
+            horizontal.setSpacing(10)
+            marker = QLabel("●")
+            marker.setStyleSheet(
+                f"font-size: 20px; color: {SEGMENT_COLORS[index]}; "
+                "background: transparent; border: none;"
+            )
+            marker.setAlignment(Qt.AlignmentFlag.AlignTop)
+            horizontal.addWidget(marker)
+            details = QVBoxLayout()
+            details.setSpacing(2)
+            for object_name, text in (
+                ("analyticsLegendName", f"{index + 1}. {name}"),
+                ("analyticsLegendMeta", f"Marca: {brand}  |  Categoría: {category}"),
+                ("analyticsLegendMeta", f"Color: {color}  |  Código: {code}"),
+                ("analyticsLegendSales",
+                 f"Ventas: {_money(float(product['ventas']))}  ·  "
+                 f"{100 * float(product['ventas']) / total:.1f}% del Top 5"),
+            ):
+                label = QLabel(text)
+                label.setObjectName(object_name)
+                label.setTextFormat(Qt.TextFormat.PlainText)
+                label.setWordWrap(True)
+                details.addWidget(label)
+            horizontal.addLayout(details, 1)
+            self.pie_legend_layout.addWidget(row)
 
     def apply_theme(self, dark: bool) -> None:
         self._dark = bool(dark)
@@ -258,6 +320,23 @@ class AnnualAnalyticsPanel(QWidget):
             QLabel#analyticsSecondary {{
                 color: {colors['muted']};
                 background: transparent; border: none;
+            }}
+            QFrame#analyticsLegendRow {{
+                background: {colors['surface']};
+                border: 1px solid {colors['border']};
+                border-radius: 7px;
+            }}
+            QLabel#analyticsLegendName {{
+                font-size: 13px; font-weight: bold;
+                color: {colors['text']}; border: none;
+            }}
+            QLabel#analyticsLegendMeta {{
+                font-size: 12px;
+                color: {colors['muted']}; border: none;
+            }}
+            QLabel#analyticsLegendSales {{
+                font-size: 12px; font-weight: bold;
+                color: {colors['text']}; border: none;
             }}
         """)
         self.performance_chart.apply_theme(dark)
